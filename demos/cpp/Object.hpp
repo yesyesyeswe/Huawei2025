@@ -1,0 +1,60 @@
+#ifndef OBJECT_HPP
+#define OBJECT_HPP
+#include<cmath>
+#include<list>
+#include "Disk.hpp"
+#include <climits>
+#include <utility>
+using std::max;
+using std::list;
+using std::pair;
+
+/******************** 对象副本类 ********************/
+class ObjectReplica {
+private:
+    int disk_id;                // 数据存放硬盘号
+    vector<int> unit_ids;       // 数据存放单元号
+    
+public:
+    ObjectReplica(int disk, const vector<int>& units) 
+        : disk_id(disk), unit_ids(units) {}
+        
+    // 计算访问成本
+    int access_cost(const Disk& disk, const vector<int>& unit_ids) const;
+    
+    // Getter方法
+    int get_disk() const { return disk_id; }
+    const vector<int>& get_units() const { return unit_ids; }
+};
+    
+/******************** 对象元数据类 ********************/
+class StorageObject {
+private:
+    int object_id;                      // 物品 id
+    int size;                           // 物品大小
+    int tag;                            // 物品标签
+    bool is_delete;                     // 是否被删除
+    vector<ObjectReplica> replicas;     // 物品副本
+    list<int> pending_requests;         // 待处理请求列表
+    
+public:
+    StorageObject(int id, int sz, int tg) 
+        : object_id(id), size(sz), tag(tg) {}
+        
+    // 添加副本
+    void add_replica(const ObjectReplica& rep) {
+        replicas.push_back(rep);
+    }
+    
+    // 获取最佳访问副本
+    const ObjectReplica& get_best_replica(const vector<Disk>& disks) const;
+    
+    // 请求管理
+    void add_request(int req_id) { pending_requests.push_back(req_id); }
+    void complete_request(int req_id) { pending_requests.remove(req_id); }
+
+    // Getter 方法
+    int get_size() const { return size; };
+    const vector<ObjectReplica> get_replica() const { return replicas; }
+};
+#endif
