@@ -19,13 +19,14 @@ G：代表每个磁头每个时间片最多消耗的令牌数。
 
 int T, M, N, V, G;
 
-void timestamp_action()
+int timestamp_action()
 {
     int timestamp;
     scanf("%*s%d", &timestamp);
     printf("TIMESTAMP %d\n", timestamp);
 
     fflush(stdout);
+    return timestamp;
 }
 
 // 预处理数据存储
@@ -58,32 +59,33 @@ int main()
 
     for(int t = 1; t <= T + EXTRA_TIME; t ++) {
         // 处理时间片对齐
-        timestamp_action();
+        controller.current_time = timestamp_action();
         
         // 处理删除事件
         int n_delete;
         scanf("%d", &n_delete);
         // 处理删除逻辑 To do
         vector<int> deleted;
-        while(n_delete --) {
+        for(int i = 0; i < n_delete; i ++) {
             int obj_id;
             scanf("%d", &obj_id);
             deleted.push_back(obj_id);
         }
+        controller.process_delete(deleted);
+        fflush(stdout);
 
         
         // 处理写入请求
-        // To do
         int n_write;
         scanf("%d", &n_write);
-        while(n_write --) {
+        for(int i = 0; i < n_write; i ++) {
             int id, size, tag;
             scanf("%d %d %d", &id, &size, &tag);
             controller.process_write(id, size, tag);
         }
+        fflush(stdout);
         
         // 处理读取请求
-        // To do
         int n_read;
         scanf("%d", &n_read);
         while(n_read --) {
@@ -94,6 +96,7 @@ int main()
         
         // 推进时间
         controller.tick(G);
+        fflush(stdout);
     }
 
     return 0;

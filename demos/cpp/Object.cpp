@@ -3,7 +3,7 @@
 int ObjectReplica::access_cost(const Disk& disk, const vector<int>& unit_ids) const {
     if(unit_ids.empty()) return INT_MAX;
     
-    // 使用SCAN算法计算最优路径
+    // 使用 SCAN 算法计算最优路径
     vector<int> positions = { disk.get_head() };
     positions.insert(positions.end(), unit_ids.begin(), unit_ids.end());
     sort(positions.begin() + 1, positions.end(), [](int a, int b) { return a > b; });
@@ -19,7 +19,7 @@ int ObjectReplica::access_cost(const Disk& disk, const vector<int>& unit_ids) co
         }
         prev = p;
     }
-    return cost * 64; // 估算令牌消耗
+    return cost; // 估算令牌消耗
 }
 
 const ObjectReplica& StorageObject::get_best_replica(const vector<Disk>& disks) const {

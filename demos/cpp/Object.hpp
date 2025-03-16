@@ -14,10 +14,11 @@ class ObjectReplica {
 private:
     int disk_id;                // 数据存放硬盘号
     vector<int> unit_ids;       // 数据存放单元号
+    bool consecutive;           // 副本是否连续存放
     
 public:
-    ObjectReplica(int disk, const vector<int>& units) 
-        : disk_id(disk), unit_ids(units) {}
+    ObjectReplica(int disk, const vector<int>& units, int cons) 
+        : disk_id(disk), unit_ids(units), consecutive(cons) {}
         
     // 计算访问成本
     int access_cost(const Disk& disk, const vector<int>& unit_ids) const;
@@ -25,6 +26,7 @@ public:
     // Getter方法
     int get_disk() const { return disk_id; }
     const vector<int>& get_units() const { return unit_ids; }
+    bool isconsecutive() const { return consecutive; }
 };
     
 /******************** 对象元数据类 ********************/
@@ -34,10 +36,12 @@ private:
     int size;                           // 物品大小
     int tag;                            // 物品标签
     bool is_delete;                     // 是否被删除
-    vector<ObjectReplica> replicas;     // 物品副本
-    list<int> pending_requests;         // 待处理请求列表
+    
     
 public:
+    vector<ObjectReplica> replicas;     // 物品副本
+    set<int> pending_requests;          // 待处理请求列表
+
     StorageObject(int id, int sz, int tg) 
         : object_id(id), size(sz), tag(tg) {}
         
@@ -50,8 +54,8 @@ public:
     const ObjectReplica& get_best_replica(const vector<Disk>& disks) const;
     
     // 请求管理
-    void add_request(int req_id) { pending_requests.push_back(req_id); }
-    void complete_request(int req_id) { pending_requests.remove(req_id); }
+    void add_request(int req_id) { pending_requests.insert(req_id); }
+    void complete_request(int req_id) { pending_requests.erase(req_id); }
 
     // Getter 方法
     int get_size() const { return size; };

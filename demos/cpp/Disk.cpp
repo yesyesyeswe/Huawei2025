@@ -1,9 +1,9 @@
 #include "Disk.hpp"
 
-vector<int> Disk::allocate(int size) {
+vector<int> Disk::allocate(int size, int obj_id, int& consecutive) {
     vector<int> allocated;
     vector<int> candidate;
-    int consecutive = 0;
+    consecutive = 0;
     
     // 寻找连续空间
     queue<int> free_units_copy = free_units;
@@ -28,7 +28,7 @@ vector<int> Disk::allocate(int size) {
     
     // 没有足够连续空间则分配离散
     if(allocated.empty()) {
-        while(size-- && !free_units.empty()) {
+        while(size -- && !free_units.empty()) {
             int u = free_units.front();
             free_units.pop();
             allocated.push_back(u);
@@ -50,56 +50,150 @@ vector<int> Disk::allocate(int size) {
         }
         free_units = new_queue;
     }
+    
+    assert(size == allocated.size());
+    for(int i = 0; i < size; i ++) {
+        units[allocated[i]].object_id = obj_id;
+        units[allocated[i]].object_block = i + 1;
+        units[allocated[i]].is_used = true;
+    }
     return allocated;
+}
+
+void Disk::save_status(const int pos, const int action, const int consum) {
+    set_head_position(pos);
+    set_prev_action(action);
+    set_prev_consum(consum);
+    return; 
+}
+
+void Disk::get_actions(vector<int>& obj_index, string& actions, vector<int>& units_read_id, const int G) {
+    if(!can_perform(0, G)) return;
+    int current = get_head();
+    for(int t : obj_index) {
+        int steps = t - current;
+
+        if(steps > 0) {
+            if(!can_perform(steps, G)) {
+                int new_steps = G - get_current_tokens();
+                actions += string(new_steps, 'p');
+                current += new_steps;
+                save_status(current, MOVE, G);
+                actions += '#';
+                return;
+            }
+            actions += string(steps, 'p');
+            current += steps;
+            set_prev_action(MOVE);
+            consume_tokens(steps);
+        }
+        int READ_CONSUME = (get_prev_action() == MOVE) ? 64 : std::max(16, get_prev_consum() * 4 / 5 + 1);
+
+        if(!can_perform(READ_CONSUME, G)) {
+            save_status(current, MOVE, get_current_tokens());
+            actions += '#';
+            return;
+        }
+        actions += 'r';
+        units_read_id.push_back(current);
+        set_prev_action(READ);
+        consume_tokens(READ_CONSUME);
+        current = t + 1;
+    }
+
+    set_head_position(current);
+    return;
+}
+
+std::pair<vector<int>, vector<int>> Disk::separate_requests(
+    const vector<int>& targets) {
+    int head = get_head();
+    // 创建一个副本以避免修改原始数据
+    vector<int> sorted_targets = targets;
+    std::sort(sorted_targets.begin(), sorted_targets.end());
+
+    // 使用 std::partition 分离左右请求
+    auto pivot = std::partition(sorted_targets.begin(), sorted_targets.end(),
+                                 [head](int t) { return t < head; });
+
+    // 左侧请求：小于当前磁头位置
+    vector<int> left(sorted_targets.begin(), pivot);
+
+    // 右侧请求：大于或等于当前磁头位置
+    vector<int> right(pivot, sorted_targets.end());
+
+    return {left, right};
+}
+
+void Disk::move_to_read(int destination, string& actions, const int G, const int V) {
+    if(!can_perform(0, G)) return;
+    int current = get_head();
+    if(!can_perform(destination - current, G)) {
+        // 没有操作过
+        if(get_current_tokens() == 0) {
+            assert(actions.empty());
+            destination = (destination > V) ? (destination % V) : destination;
+            save_status(destination, MOVE, G);
+            actions = "j " + std::to_string(destination);
+            return;
+        }
+        int new_steps = G - get_current_tokens();
+        actions += string(new_steps, 'p');
+        current += new_steps;
+        current = (current > V ? (current % V) : current);
+        save_status(current, MOVE, G);
+        actions += '#';
+        return;
+    }
+    actions += string(destination - current, 'p');
+    consume_tokens(destination - current);
+    set_prev_action(MOVE);
+    destination = (destination > V) ? (destination % V) : destination;
+    set_head_position(destination);
+    return;
 }
 
 // 磁头移动调度
 // To Improve
-string Disk::schedule_moves(const vector<int>& targets, const int G) {
-    vector<int> sorted(targets);
-    sort(sorted.begin(), sorted.end());
+string Disk::schedule_moves(const vector<int>& targets, vector<pair<int, vector<int>>>& obj_info, const int G) {
+    if (targets.empty()) return "#";
+    vector<int> units_read_id;
     
-    // 使用SCAN算法规划路径
+    // 使用 SCAN 算法规划路径
     string actions;
-    int current = head_position;
 
     // 分离左右请求
-    auto right = sorted;  // t >= head_position 的请求
-    auto left = sorted;   // t < head_position 的请求（反向遍历）
-    right.erase(remove_if(right.begin(), right.end(), [&](int t){ return t < current; }), right.end());
-    left.erase(remove_if(left.begin(), left.end(), [&](int t){ return t >= current; }), left.end());
-    
-    // 处理向右移动
-    for(int t : right) {
-        int steps = t - current;
-        if(steps > 0) {
-            actions += string(steps, 'p');
-        }
-        actions += 'r';
-        current = t + 1;
+    auto [left, right] = separate_requests(targets);
+
+    const int V = get_capacity();
+    if(!right.empty()) {
+        int begin = right.front();
+        // 预移动
+        move_to_read(begin, actions, G, V);
+        // 处理右半部分
+        get_actions(right, actions, units_read_id, G);
     }
     
-    // 处理绕转情况
-    const int V = get_capacity();
-    if(!sorted.empty() && sorted.back() < head_position) {
-        actions += string(V - current + 1, 'p');
-        current = 1;
-        for(int t : left) {
-            int steps = t - current;
-            actions += string(steps, 'p') + 'r';
-            current = t + 1;
-        }
+    // 处理左半部分
+    if(!left.empty() && left.back() < head_position) {
+        // 预移动到头
+        move_to_read(V + 1, actions, G, V);
+        // 处理左右半部分
+        get_actions(left, actions, units_read_id, G);
     }
     
     actions += '#';
 
-    // 令牌消耗检查
-    int tokens = 64 + (actions.size() - 1) * 16; // 估算值
-    if(tokens > G) {
-        // 需要拆分到多个时间片
-        return "j " + std::to_string(sorted.front());
+    if(!units_read_id.empty()) {
+        obj_info.push_back({get_disk_id(), units_read_id});
     }
 
+    assert(get_current_tokens() <= G);
+    assert(get_prev_action() == MOVE || get_prev_action() == READ);
+    assert(get_head() <= V && get_head() >= 1);
+    assert(actions.size() >= 1);
+
+    reset_tokens();
 
     return actions;
 }
