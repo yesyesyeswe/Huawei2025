@@ -36,10 +36,7 @@ void StorageController::process_write(int obj_id, int size, int tag) {
     // 选择目标磁盘
     vector<int> selected_disks;
     while(selected_disks.size() < REP_NUM) {
-        int d = tag_manager.select_disk(tag, disks);
-        if(find(selected_disks.begin(), selected_disks.end(), d) == selected_disks.end()) {
-            selected_disks.push_back(d);
-        }
+        selected_disks = tag_manager.select_disk(tag, disks);
     }
     
     // 分配存储空间
@@ -71,7 +68,12 @@ void StorageController::tick(const int G) {
         if(scheduler.pq.empty()) break;
         auto [_, req_id] = scheduler.pq.top();
         scheduler.pq.pop();
-        assert(scheduler.active_requests.count(req_id));
+        if(!scheduler.active_requests.count(req_id)) continue;
+        // 忽略超时请求
+        else if(current_time - scheduler.active_requests[req_id].start_time > EXTRA_TIME) {
+            //scheduler.active_requests.erase(req_id);
+            continue;
+        }
         plan.Requests_id.insert(req_id);
     }
 
@@ -79,7 +81,7 @@ void StorageController::tick(const int G) {
     scheduler.schedule_round(disks, objects, plan, G);
     scheduler.printf_actions(disks, objects, G);
     fflush(stdout);
-    
+
     // 打印完成请求
     scheduler.printf_completed_request(plan, objects);
     scheduler.clean();

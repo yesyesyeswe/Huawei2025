@@ -20,6 +20,6 @@ private:
     
 public:
     // 获取推荐磁盘
-    int select_disk(int tag, const vector<Disk>& disks);
+    vector<int> select_disk(int tag, const vector<Disk>& disks);
 };
 #endif

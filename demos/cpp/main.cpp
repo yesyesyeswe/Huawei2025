@@ -17,11 +17,9 @@ V：代表存储系统中每个硬盘的存储单元个数。存储单元编号�
 G：代表每个磁头每个时间片最多消耗的令牌数。 
 */
 
-int T, M, N, V, G;
-
 int timestamp_action()
 {
-    int timestamp;
+    int timestamp = 0;
     scanf("%*s%d", &timestamp);
     printf("TIMESTAMP %d\n", timestamp);
 
@@ -35,14 +33,15 @@ vector<vector<int>> fre_del, fre_write, fre_read;
 
 int main()
 {
+    int T, M, N, V, G;
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
     StorageController controller(N + 1, V);
 
      // 预处理数据加载
-     auto load_fre = [](vector<vector<int>>& dest) {
+     auto load_fre = [M, T](vector<vector<int>>& dest) {
         dest.resize(M + 1);
         for(int i = 1; i <= M; i ++) {
-            int slices = (T + EXTRA_TIME) / FRE_PER_SLICING + 1;
+            int slices = (T - 1) / FRE_PER_SLICING + 1;
             dest[i].resize(slices + 1);
             for(int j = 1; j <= slices; j ++)
                 scanf("%d", &dest[i][j]);

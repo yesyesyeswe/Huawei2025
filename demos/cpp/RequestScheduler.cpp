@@ -2,6 +2,9 @@
 
 void RequestScheduler::schedule_round(vector<Disk>& disks, unordered_map<int, StorageObject>& objects, BatchReadPlan& plan, const int G) {
 
+    // bug-fixed: 迭代过程中小心删除元素
+    std::vector<int> requests_to_remove;
+
     // 遍历所有的待处理请求
     for(auto& req_id : plan.Requests_id) {
         // 清理（对于那些在 pq 中被动完成的请求）
@@ -10,7 +13,7 @@ void RequestScheduler::schedule_round(vector<Disk>& disks, unordered_map<int, St
             complete_request.push_back(req_id);
             n_rsp ++;
             active_requests.erase(req_id);
-            plan.Requests_id.erase(req_id);
+            requests_to_remove.push_back(req_id);
             continue;
         }
         
@@ -44,7 +47,11 @@ void RequestScheduler::schedule_round(vector<Disk>& disks, unordered_map<int, St
             plan.units_to_read[best_disk].push_back(best_replica.unit_ids[i]);
         }
     }
-    
+
+    // 统一从 plan.Requests_id 中删除这些请求 ID
+    for (auto& req_id : requests_to_remove) {
+        plan.Requests_id.erase(req_id);
+    }
     return;
 }
 
@@ -67,8 +74,8 @@ void RequestScheduler::printf_actions(vector<Disk>& disks, unordered_map<int, St
             vector<int>& obj_blocks = obj_pair.second;
             auto req_set = objects[obj_id].pending_requests;
             for(int req_id : req_set) {
-                assert(obj_id == active_requests[req_id].object_id);
                 if(active_requests.count(req_id)) {
+                    assert(obj_id == active_requests[req_id].object_id);
                     active_requests[req_id].completed_blocks.insert(obj_blocks.begin(), obj_blocks.end());
                     // To fix
                 }
@@ -91,6 +98,7 @@ void RequestScheduler::printf_completed_request(BatchReadPlan& plan, unordered_m
             complete_request.push_back(req_id);
             n_rsp++;
             active_requests.erase(req_id);
+            assert(objects[req.object_id].pending_requests.count(req_id));
             objects[req.object_id].pending_requests.erase(req_id);
         }
     }

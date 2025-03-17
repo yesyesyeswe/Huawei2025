@@ -4,6 +4,7 @@ vector<int> Disk::allocate(int size, int obj_id, int& consecutive) {
     vector<int> allocated;
     vector<int> candidate;
     consecutive = 0;
+    int size_copy = size;
     
     // 寻找连续空间
     queue<int> free_units_copy = free_units;
@@ -28,7 +29,7 @@ vector<int> Disk::allocate(int size, int obj_id, int& consecutive) {
     
     // 没有足够连续空间则分配离散
     if(allocated.empty()) {
-        while(size -- && !free_units.empty()) {
+        while(!free_units.empty() && size -- ) {
             int u = free_units.front();
             free_units.pop();
             allocated.push_back(u);
@@ -51,7 +52,11 @@ vector<int> Disk::allocate(int size, int obj_id, int& consecutive) {
         free_units = new_queue;
     }
     
-    assert(size == allocated.size());
+    if(size_copy != allocated.size()) {
+        printf("%dK%ldK%d\n", size_copy, allocated.size(), size);
+        fflush(stdout);
+    }
+    assert(size_copy == allocated.size());
     for(int i = 0; i < size; i ++) {
         units[allocated[i]].object_id = obj_id;
         units[allocated[i]].object_block = i + 1;
@@ -68,7 +73,7 @@ void Disk::save_status(const int pos, const int action, const int consum) {
 }
 
 bool Disk::get_actions(vector<int>& obj_index, string& actions, vector<int>& units_read_id, const int G) {
-    if(!can_perform(0, G)) return true;
+    if(!can_perform(1, G)) return true;
     int current = get_head();
     for(int t : obj_index) {
         int steps = t - current;
@@ -76,9 +81,12 @@ bool Disk::get_actions(vector<int>& obj_index, string& actions, vector<int>& uni
         if(steps > 0) {
             if(!can_perform(steps, G)) {
                 int new_steps = G - get_current_tokens();
-                actions += string(new_steps, 'p');
-                current += new_steps;
-                save_status(current, MOVE, G);
+                assert(new_steps >= 0);
+                if(new_steps > 0) {
+                    actions += string(new_steps, 'p');
+                    current += new_steps;
+                    save_status(current, MOVE, 1);
+                }
                 actions += '#';
                 return true;
             }
@@ -86,12 +94,13 @@ bool Disk::get_actions(vector<int>& obj_index, string& actions, vector<int>& uni
             current += steps;
             set_prev_action(MOVE);
             consume_tokens(steps);
-            set_prev_consum(get_current_tokens());
+            set_prev_consum(1);
         }
-        int READ_CONSUME = (get_prev_action() == MOVE) ? 64 : std::max(16, get_prev_consum() * 4 / 5 + 1);
+        assert(steps >= 0);
+        int READ_CONSUME = (get_prev_action() == MOVE) ? 64 : std::max(16, (get_prev_consum() * 8 + 9) / 10);
 
         if(!can_perform(READ_CONSUME, G)) {
-            save_status(current, MOVE, get_current_tokens());
+            save_status(current, get_prev_action(), get_prev_consum());
             actions += '#';
             return true;
         }
@@ -99,14 +108,22 @@ bool Disk::get_actions(vector<int>& obj_index, string& actions, vector<int>& uni
         units_read_id.push_back(current);
         set_prev_action(READ);
         consume_tokens(READ_CONSUME);
-        set_prev_consum(get_current_tokens());
+        set_prev_consum(READ_CONSUME);
+        assert(current == t);
         current = t + 1;
     }
 
     set_head_position(current);
-    set_prev_consum(get_current_tokens());
+    //set_prev_consum(get_current_tokens());
     return false;
 }
+
+/*
+(gdb) p current
+$2 = 3041
+(gdb) p t
+$3 = 3040
+*/
 
 std::pair<vector<int>, vector<int>> Disk::separate_requests(
     const vector<int>& targets) {
@@ -125,12 +142,14 @@ std::pair<vector<int>, vector<int>> Disk::separate_requests(
     // 右侧请求：大于或等于当前磁头位置
     vector<int> right(pivot, sorted_targets.end());
 
+    assert((left.empty() || left.back() < head) && (right.empty() || head <= right.front()));
     return {left, right};
 }
 
 bool Disk::move_to_read(int destination, string& actions, const int G, const int V) {
-    if(!can_perform(0, G)) return true;
+    if(!can_perform(1, G)) return true;
     int current = get_head();
+    assert(destination >= current);
     if(!can_perform(destination - current, G)) {
         // 没有操作过
         if(get_current_tokens() == 0) {
@@ -141,19 +160,25 @@ bool Disk::move_to_read(int destination, string& actions, const int G, const int
             return true;
         }
         int new_steps = G - get_current_tokens();
-        actions += string(new_steps, 'p');
-        current += new_steps;
-        current = (current > V ? (current % V) : current);
-        save_status(current, MOVE, G);
+        assert(new_steps >= 0);
+        if(new_steps > 0) {
+            actions += string(new_steps, 'p');
+            current += new_steps;
+            current = (current > V) ? (current % V) : current;
+            save_status(current, MOVE, 1);   
+        }
         actions += '#';
         return true;
     }
-    actions += string(destination - current, 'p');
-    consume_tokens(destination - current);
-    set_prev_consum(get_current_tokens());
-    set_prev_action(MOVE);
-    destination = (destination > V) ? (destination % V) : destination;
-    set_head_position(destination);
+    // 若移动了，设定 prev 情况
+    if(destination > current) {
+        actions += string(destination - current, 'p');
+        consume_tokens(destination - current);
+        set_prev_consum(1);
+        set_prev_action(MOVE);
+        destination = (destination > V) ? (destination % V) : destination;
+        set_head_position(destination);
+    }
     return false;
 }
 
@@ -175,7 +200,9 @@ string Disk::schedule_moves(const vector<int>& targets, unordered_map<int, vecto
         int begin = right.front();
         // 预移动
         isdone |= move_to_read(begin, actions, G, V);
+        
         // 处理右半部分
+        if(!isdone)
         isdone |= get_actions(right, actions, units_read_id, G);
     }
     
@@ -183,7 +210,8 @@ string Disk::schedule_moves(const vector<int>& targets, unordered_map<int, vecto
     if(!isdone && !left.empty() && left.back() < head_position) {
         // 预移动到头
         isdone |= move_to_read(V + 1, actions, G, V);
-        // 处理左右半部分
+        // 处理左半部分
+        if(!isdone)
         isdone |= get_actions(left, actions, units_read_id, G);
     }
     

@@ -9,12 +9,14 @@
 #include <utility>
 #include <unordered_map>
 #include "Constant.hpp"
+#include <cmath>
 using std::vector;
 using std::queue;
 using std::string;
 using std::set;
 using std::pair;
 using std::unordered_map;
+using std::ceil;
 
 #define READ 999
 #define MOVE 998
