@@ -36,10 +36,10 @@ vector<vector<int>> fre_del, fre_write, fre_read;
 int main()
 {
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
-    StorageController controller(N, V);
+    StorageController controller(N + 1, V);
 
      // 预处理数据加载
-     auto load_fre = [&](vector<vector<int>>& dest) {
+     auto load_fre = [](vector<vector<int>>& dest) {
         dest.resize(M + 1);
         for(int i = 1; i <= M; i ++) {
             int slices = (T + EXTRA_TIME) / FRE_PER_SLICING + 1;
@@ -88,7 +88,7 @@ int main()
         // 处理读取请求
         int n_read;
         scanf("%d", &n_read);
-        while(n_read --) {
+        for(int i = 0; i < n_read; i ++) {
             int req_id, obj_id;
             scanf("%d %d", &req_id, &obj_id);
             controller.process_read(req_id, obj_id);

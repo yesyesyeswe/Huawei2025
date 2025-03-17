@@ -19,7 +19,7 @@ void StorageController::process_delete(vector<int>& deleted_object_id) {
 
                 // 删除请求
                 scheduler.active_requests.erase(req_id);
-                scheduler.get_plan().Requests.erase(scheduler.active_requests[req_id]);
+                scheduler.get_plan().Requests_id.erase(req_id);
             }
         }
         objects.erase(obj_id);
@@ -67,16 +67,19 @@ void StorageController::tick(const int G) {
     BatchReadPlan& plan = scheduler.get_plan();
     int disk_num = disks.size();
     // 若 Request 太少，则增加
-    while (plan.Requests.size() < std::min((size_t)disk_num, scheduler.pq.size())) {
+    while (plan.Requests_id.size() < std::min((size_t)disk_num, scheduler.pq.size())) {
         if(scheduler.pq.empty()) break;
         auto [_, req_id] = scheduler.pq.top();
-        plan.Requests.insert(scheduler.active_requests[req_id]);
+        scheduler.pq.pop();
+        assert(scheduler.active_requests.count(req_id));
+        plan.Requests_id.insert(req_id);
     }
 
     // 执行请求调度
     scheduler.schedule_round(disks, objects, plan, G);
     scheduler.printf_actions(disks, objects, G);
-
+    fflush(stdout);
+    
     // 打印完成请求
     scheduler.printf_completed_request(plan, objects);
     scheduler.clean();

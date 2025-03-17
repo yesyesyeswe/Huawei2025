@@ -3,17 +3,19 @@
 void RequestScheduler::schedule_round(vector<Disk>& disks, unordered_map<int, StorageObject>& objects, BatchReadPlan& plan, const int G) {
 
     // 遍历所有的待处理请求
-    for(auto& req : plan.Requests) {
+    for(auto& req_id : plan.Requests_id) {
         // 清理（对于那些在 pq 中被动完成的请求）
+        auto& req = active_requests[req_id];
         if(req.is_completed(objects[req.object_id].get_size())) {
-            complete_request.push_back(req.req_id);
+            complete_request.push_back(req_id);
             n_rsp ++;
-            active_requests.erase(req.req_id);
-            plan.Requests.erase(req);
+            active_requests.erase(req_id);
+            plan.Requests_id.erase(req_id);
             continue;
         }
-
+        
         // 跳过正在处理的物品
+        // 不正确，因为可能有新的读取请求，待修改 To do
         if(plan.Object_to_read.count(req.object_id)) continue;
         plan.Object_to_read.insert(req.object_id);
 
@@ -25,21 +27,21 @@ void RequestScheduler::schedule_round(vector<Disk>& disks, unordered_map<int, St
             if(req.completed_blocks.count(i)) continue;
             
             int best_disk = -1, min_cost = INT_MAX;
-            const ObjectReplica* best_replica = &obj.get_replica()[0];
+            ObjectReplica best_replica = obj.replicas[0];
             for(int rep = 0; rep < REP_NUM; rep ++) {
-                auto& replica = obj.get_replica()[rep];
+                auto& replica = obj.replicas[rep];
                 Disk& disk = disks[replica.get_disk()];
-                int cost = replica.access_cost(disk, {replica.get_units()[i]});
+                int cost = replica.access_cost(disk, {replica.unit_ids[i]});
                 // 优先选择连续存放的副本
                 if(replica.isconsecutive()) cost -= 50;
                 if(cost < min_cost) {
                     min_cost = cost;
-                    best_replica = &replica;
-                    best_disk = (*best_replica).get_disk();
+                    best_replica = replica;
+                    best_disk = best_replica.get_disk();
                 }
             }
             assert(best_disk != -1);
-            plan.units_to_read[best_disk].push_back((*best_replica).get_units()[i]);
+            plan.units_to_read[best_disk].push_back(best_replica.unit_ids[i]);
         }
     }
     
@@ -48,11 +50,12 @@ void RequestScheduler::schedule_round(vector<Disk>& disks, unordered_map<int, St
 
 void RequestScheduler::printf_actions(vector<Disk>& disks, unordered_map<int, StorageObject>& objects, const int G) {
     // 记录读取的 obj 信息
-    vector<pair<int, vector<int>>> obj_info;
+    unordered_map<int, vector<int>> obj_info;
     // 生成磁盘指令
     for(size_t i = 1; i < disks.size(); i ++) {
         if(!plan.units_to_read[i].empty()) {
-            printf("%s\n" , disks[i].schedule_moves(plan.units_to_read[i], obj_info, G));
+            //std::cout << disks[i].schedule_moves(plan.units_to_read[i], obj_info, G) << std::endl;
+            printf("%s\n" , disks[i].schedule_moves(plan.units_to_read[i], obj_info, G).c_str());
         } else {
             printf("#\n");
         }
@@ -67,6 +70,7 @@ void RequestScheduler::printf_actions(vector<Disk>& disks, unordered_map<int, St
                 assert(obj_id == active_requests[req_id].object_id);
                 if(active_requests.count(req_id)) {
                     active_requests[req_id].completed_blocks.insert(obj_blocks.begin(), obj_blocks.end());
+                    // To fix
                 }
                 else {
                     objects[obj_id].pending_requests.erase(req_id);
@@ -78,20 +82,29 @@ void RequestScheduler::printf_actions(vector<Disk>& disks, unordered_map<int, St
 }
 
 void RequestScheduler::printf_completed_request(BatchReadPlan& plan, unordered_map<int, StorageObject>& objects) {
-    for(auto& req : plan.Requests) {
-        if(req.is_completed(objects[req.object_id].get_size())) {
-            complete_request.push_back(req.req_id);
-            n_rsp ++;
-            active_requests.erase(req.req_id);
-            plan.Requests.erase(req);
-            objects[req.object_id].pending_requests.erase(req.req_id);
-            continue;
+    vector<int> requests_to_remove;
+
+    for (int req_id : plan.Requests_id) {
+        auto& req = active_requests[req_id];
+        if (req.is_completed(objects[req.object_id].get_size())) {
+            requests_to_remove.push_back(req_id);
+            complete_request.push_back(req_id);
+            n_rsp++;
+            active_requests.erase(req_id);
+            objects[req.object_id].pending_requests.erase(req_id);
         }
     }
+
+    // 统一从 plan.Requests_id 中删除这些请求 ID
+    for (int req_id : requests_to_remove) {
+        plan.Requests_id.erase(req_id);
+    }
+    
     assert(n_rsp == complete_request.size());
     printf("%d\n", n_rsp);
     for(int i = 0; i < n_rsp; i ++) {
-        printf("%d\n", complete_request[n_rsp]);
+        printf("%d\n", complete_request[i]);
     }
+    fflush(stdout);
     return;
 }

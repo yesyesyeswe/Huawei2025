@@ -13,10 +13,11 @@ using std::pair;
 class ObjectReplica {
 private:
     int disk_id;                // 数据存放硬盘号
-    vector<int> unit_ids;       // 数据存放单元号
     bool consecutive;           // 副本是否连续存放
     
 public:
+    vector<int> unit_ids;       // 数据存放单元号
+
     ObjectReplica(int disk, const vector<int>& units, int cons) 
         : disk_id(disk), unit_ids(units), consecutive(cons) {}
         
@@ -35,15 +36,15 @@ private:
     int object_id;                      // 物品 id
     int size;                           // 物品大小
     int tag;                            // 物品标签
-    bool is_delete;                     // 是否被删除
     
     
 public:
     vector<ObjectReplica> replicas;     // 物品副本
     set<int> pending_requests;          // 待处理请求列表
 
-    StorageObject(int id, int sz, int tg) 
-        : object_id(id), size(sz), tag(tg) {}
+    StorageObject(int id, int sz, int tg) : object_id(id), size(sz), tag(tg) {}
+
+    StorageObject() : object_id(-1), size(-1), tag(-1) {}
         
     // 添加副本
     void add_replica(const ObjectReplica& rep) {
@@ -59,6 +60,6 @@ public:
 
     // Getter 方法
     int get_size() const { return size; };
-    const vector<ObjectReplica> get_replica() const { return replicas; }
+    const vector<ObjectReplica>& get_replica() const { return replicas; }
 };
 #endif

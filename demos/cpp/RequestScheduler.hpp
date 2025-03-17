@@ -8,6 +8,7 @@
 #include <bitset>
 #include <set>
 #include <map>
+#include <iostream>
 using std::unordered_map;
 using std::unordered_set;
 using std::priority_queue;
@@ -29,12 +30,17 @@ public:
     bool is_completed(int total) const {
         return completed_blocks.size() == total;
     }
+
+    bool operator<(const ReadRequest& other) const {
+        // 根据你的需求定义比较逻辑，例如按 req_id 排序
+        return req_id < other.req_id;
+    }
 };
 
 struct BatchReadPlan {
     set<int> Object_to_read;            // 本批次要读取的对象
     vector<vector<int>> units_to_read;  // 本次要处理的单元
-    set<ReadRequest> Requests;          // 一次处理的所有 Requests
+    set<int> Requests_id;                  // 一次处理的所有 Requests
     int total_tokens;                   // 预计消耗令牌
     float total_score;                  // 预期收益
 

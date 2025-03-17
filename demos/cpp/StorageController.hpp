@@ -17,7 +17,7 @@ public:
 
     StorageController(int disk_num, int disk_cap) {
         scheduler = RequestScheduler(disk_num);
-        for(int i = 0; i <= disk_num; i ++) {
+        for(int i = 0; i < disk_num; i ++) {
             disks.emplace_back(i, disk_cap);
         }
     }

@@ -1,3 +1,11 @@
 replay/
 testdisk.log
 .vscode/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+code_craft
+debug.txt
+main_origin.txt
+result.txt

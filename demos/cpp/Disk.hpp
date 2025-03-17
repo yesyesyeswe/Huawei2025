@@ -7,12 +7,14 @@
 #include <algorithm>
 #include <set>
 #include <utility>
+#include <unordered_map>
 #include "Constant.hpp"
 using std::vector;
 using std::queue;
 using std::string;
 using std::set;
 using std::pair;
+using std::unordered_map;
 
 #define READ 999
 #define MOVE 998
@@ -26,6 +28,7 @@ class DiskUnit {
         
         DiskUnit(int id) : unit_id(id), is_used(false), object_id(-1), object_block(-1) {}
         void reset() {
+            assert(unit_id != 0);
             is_used = false;
             object_id = -1;
             object_block = -1;
@@ -60,9 +63,9 @@ public:
     std::pair<vector<int>, vector<int>> separate_requests(const vector<int>& targets);
 
     // 磁头移动调度
-    string schedule_moves(const vector<int>& targets, vector<pair<int, vector<int>>>& obj_info, const int G);
-    void move_to_read(int destination, string& actions, const int G, const int V); 
-    void get_actions(vector<int>& obj_index, string& actions, vector<int>& units_read_id, const int G);
+    string schedule_moves(const vector<int>& targets,  unordered_map<int, vector<int>>& obj_info, const int G);
+    bool move_to_read(int destination, string& actions, const int G, const int V); 
+    bool get_actions(vector<int>& obj_index, string& actions, vector<int>& units_read_id, const int G);
 
     // Setter 方法
     // 保存最后状态
