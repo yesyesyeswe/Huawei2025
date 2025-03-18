@@ -33,9 +33,30 @@ vector<vector<int>> fre_del, fre_write, fre_read;
 
 int main()
 {
+    // ifstream file("output.txt");
+    // if (!file.is_open()) {
+    //     cerr << "无法打开文件 output.txt" << endl;
+    //     return 1;
+    // }
+
+    // unordered_map<int, int> dataMap;
+    // string line;
+    // while (getline(file, line)) {
+    //     istringstream iss(line);
+    //     int timestamp, disk3;
+    //     if (iss >> timestamp >> disk3) {
+    //         dataMap[timestamp] = disk3;
+    //     } else {
+    //         cerr << "格式错误: " << line << endl;
+    //     }
+    // }
+
+    // file.close();
+
+
     int T, M, N, V, G;
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
-    StorageController controller(N + 1, V);
+    StorageController controller(N + 1, G, V);
 
      // 预处理数据加载
      auto load_fre = [M, T](vector<vector<int>>& dest) {
@@ -59,6 +80,10 @@ int main()
     for(int t = 1; t <= T + EXTRA_TIME; t ++) {
         // 处理时间片对齐
         controller.current_time = timestamp_action();
+        // if(controller.current_time > 1 && dataMap[controller.current_time - 1] != controller.disks[3].get_head()) {
+        //     printf("%d!=%d\n", dataMap[controller.current_time - 1], controller.disks[3].get_head());
+        //     assert(0);
+        // }
         
         // 处理删除事件
         int n_delete;

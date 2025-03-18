@@ -78,7 +78,7 @@ void StorageController::tick(const int G) {
     }
 
     // 执行请求调度
-    scheduler.schedule_round(disks, objects, plan, G);
+    scheduler.schedule_round(disks, objects, plan, current_time, G);
     scheduler.printf_actions(disks, objects, G);
     fflush(stdout);
 

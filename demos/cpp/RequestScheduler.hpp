@@ -38,11 +38,11 @@ public:
 };
 
 struct BatchReadPlan {
-    set<int> Object_to_read;            // 本批次要读取的对象
-    vector<vector<int>> units_to_read;  // 本次要处理的单元
-    set<int> Requests_id;                  // 一次处理的所有 Requests
-    int total_tokens;                   // 预计消耗令牌
-    float total_score;                  // 预期收益
+    set<int> Object_to_read;                        // 本批次要读取的对象
+    vector<set<int>> units_to_read;              // 本次要处理的单元
+    set<int> Requests_id;                           // 一次处理的所有 Requests
+    int total_tokens;                               // 预计消耗令牌
+    float total_score;                              // 预期收益
 
     BatchReadPlan() : total_tokens(0), total_score(0.0f) {}
 };
@@ -78,7 +78,7 @@ public:
     }
     
     // 为每一个 req 的每一个 obj 中的块选择合适的副本
-    void schedule_round(vector<Disk>& disks, unordered_map<int, StorageObject>& objects, BatchReadPlan& plan, const int G);
+    void schedule_round(vector<Disk>& disks, unordered_map<int, StorageObject>& objects, BatchReadPlan& plan, const int current_time, const int G);
     
     void printf_actions(vector<Disk>& disks, unordered_map<int, StorageObject>& objects, const int G);
     void printf_completed_request(BatchReadPlan& plan, unordered_map<int, StorageObject>& objects);

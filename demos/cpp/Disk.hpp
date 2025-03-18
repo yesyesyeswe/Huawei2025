@@ -30,7 +30,6 @@ class DiskUnit {
         
         DiskUnit(int id) : unit_id(id), is_used(false), object_id(-1), object_block(-1) {}
         void reset() {
-            assert(unit_id != 0);
             is_used = false;
             object_id = -1;
             object_block = -1;
@@ -40,18 +39,22 @@ class DiskUnit {
 class Disk {
 private:
     int disk_id;                // 磁盘号
-    int capacity;               // 容量
     int head_position;          // 磁头位置
     int current_tokens;         // 令牌
+    int max_tokens;             // 最大令牌数
     queue<int> free_units;      // 空闲磁盘单元
     int prev_action;            // 磁头上一步操作
     int prev_consum;            // 上一步消耗的令牌数
+    int capacity;               // 容量
+    int move_step;              // 移动步数
     
 public:
 
     vector<DiskUnit> units;     // 磁盘单元
+    
 
-    Disk(int id, int V) : disk_id(id), capacity(V), head_position(1), current_tokens(0), prev_action(MOVE), prev_consum(-1) {
+    Disk(int id, int G, int V) : disk_id(id), capacity(V), head_position(1), current_tokens(0), prev_action(MOVE), max_tokens(G), prev_consum(-1), move_step(0) {
+        units.emplace_back(0);
         for(int i = 1; i <= V; i ++) {
             units.emplace_back(i);
             free_units.push(i);
@@ -65,15 +68,19 @@ public:
     std::pair<vector<int>, vector<int>> separate_requests(const vector<int>& targets);
 
     // 磁头移动调度
-    string schedule_moves(const vector<int>& targets,  unordered_map<int, vector<int>>& obj_info, const int G);
-    bool move_to_read(int destination, string& actions, const int G, const int V); 
-    bool get_actions(vector<int>& obj_index, string& actions, vector<int>& units_read_id, const int G);
+    string schedule_moves(const set<int>& targets_set,  unordered_map<int, vector<int>>& obj_info);
+    bool move_to_read(int destination, string& actions); 
+    bool get_actions(vector<int>& obj_index, string& actions, vector<int>& units_read_id);
 
     // Setter 方法
     // 保存最后状态
     void save_status(const int pos, const int action, const int consum);
     // 更新磁头位置
-    void set_head_position(const int pos) { head_position = pos; }
+    void set_head_position(const int pos) { 
+        assert(head_position + move_step == pos);
+        head_position = (pos > capacity) ? pos % capacity : pos;
+        move_step = 0;
+    }
     // 更新上一步操作
     void set_prev_action(const int action) { prev_action = action; };
     // 更新上一次消耗的令牌数
@@ -84,7 +91,8 @@ public:
 
     // 更新令牌状态
     void reset_tokens() { current_tokens = 0; }
-    bool can_perform(int cost, const int G) { return current_tokens + cost <= G; }
+    void reset_move() { move_step = 0; }
+    bool can_perform(int cost) { return current_tokens + cost <= max_tokens; }
     void consume_tokens(int cost) { current_tokens += cost; }
     
     // Getter 方法
