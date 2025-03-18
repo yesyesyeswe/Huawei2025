@@ -91,14 +91,6 @@ void RequestScheduler::printf_completed_request(BatchReadPlan& plan, unordered_m
     for (int req_id : plan.Requests_id) {
         auto& req = active_requests[req_id];
         if (req.is_completed(objects[req.object_id].get_size())) {
-            // if(req.object_id == 523 && req.start_time == 319) {
-            //     printf("Object has %d blocks: ", objects[req.object_id].get_size());
-            //     for(int block_id : req.completed_blocks) {
-            //         printf("%d ", block_id);
-            //     }
-            //     printf("\n");
-            //     assert(0);
-            // }
             requests_to_remove.push_back(req_id);
             complete_request.push_back(req_id);
             n_rsp++;
