@@ -10,3 +10,6 @@ debug.txt
 main_origin.txt
 result.txt
 output.txt
+analysis.txt
+gmon.out
+sample_test.in

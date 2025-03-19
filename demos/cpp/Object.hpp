@@ -18,11 +18,11 @@ private:
 public:
     vector<int> unit_ids;       // 数据存放单元号
 
-    ObjectReplica(int disk, const vector<int>& units, int cons) 
-        : disk_id(disk), unit_ids(units), consecutive(cons) {}
+    ObjectReplica(int disk, vector<int> units, int cons) 
+        : disk_id(disk), unit_ids(std::move(units)), consecutive(cons) {}
         
     // 计算访问成本
-    int access_cost(const Disk& disk, const vector<int>& unit_ids) const;
+    int access_cost(int head_pos, int capacity, const vector<int>& unit_ids) const;
     
     // Getter方法
     int get_disk() const { return disk_id; }
@@ -47,12 +47,13 @@ public:
     StorageObject() : object_id(-1), size(-1), tag(-1) {}
         
     // 添加副本
-    void add_replica(const ObjectReplica& rep) {
-        replicas.push_back(rep);
+    // 直接接受构造参数（完美转发）
+    void add_replica(int disk, vector<int> units, int cons) {
+        replicas.emplace_back(disk, std::move(units), cons);
     }
     
     // 获取最佳访问副本
-    const ObjectReplica& get_best_replica(const vector<Disk>& disks) const;
+    // const ObjectReplica& get_best_replica(const vector<Disk>& disks) const;
     
     // 请求管理
     void add_request(int req_id) { pending_requests.insert(req_id); }

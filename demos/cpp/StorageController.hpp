@@ -3,6 +3,8 @@
 #include "RequestScheduler.hpp"
 #include "TagManage.hpp"
 #include <algorithm>
+#include <chrono>  // 引入时间库功能
+
 
 /******************** 主系统控制器 ********************/
 class StorageController {
@@ -15,8 +17,7 @@ public:
     // 记录 obj_id 和 对应的 obj
     unordered_map<int, StorageObject> objects;
 
-    StorageController(int disk_num, int disk_cap, int disk_units_num) {
-        scheduler = RequestScheduler(disk_num);
+    StorageController(int disk_num, int disk_cap, int disk_units_num) : scheduler(disk_num) {
         for(int i = 0; i < disk_num; i ++) {
             disks.emplace_back(i, disk_cap, disk_units_num);
         }
@@ -35,7 +36,7 @@ public:
     }
     
     // 执行时间片调度
-    void tick(const int G);
+    void tick(const int G, const int capacity);
 
 };
 #endif

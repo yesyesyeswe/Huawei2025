@@ -38,31 +38,33 @@ public:
 };
 
 struct BatchReadPlan {
-    set<int> Object_to_read;                        // 本批次要读取的对象
-    vector<set<int>> units_to_read;              // 本次要处理的单元
-    set<int> Requests_id;                           // 一次处理的所有 Requests
+    vector<set<int>> units_to_read;                 // 本次要处理的单元
+    vector<int> disk_head_pos;                      // 当前磁头位置
+    unordered_set<int> Requests_id;                 // 一次处理的所有 Requests
     int total_tokens;                               // 预计消耗令牌
     float total_score;                              // 预期收益
 
-    BatchReadPlan() : total_tokens(0), total_score(0.0f) {}
+    BatchReadPlan(int disk_num) : total_tokens(0), total_score(0.0f), disk_head_pos(disk_num, 1) {
+        units_to_read.resize(disk_num);
+    }
+    void insert_req(unordered_set<int>& new_req) { Requests_id.insert(new_req.begin(), new_req.end()); };
+    int get_req_size() { return Requests_id.size(); }
 };
 
-class RequestScheduler {
-private: 
-    BatchReadPlan plan;
-       
+class RequestScheduler {  
 public:
-
+    BatchReadPlan plan;
     // 维护所有未完成的活跃读请求的哈希表（以req_id为键）
     unordered_map<int, ReadRequest> active_requests; 
     priority_queue<pair<float, int>> pq;            // 得分优先级队列
     int n_rsp = 0;
     vector<int> complete_request;
 
-    RequestScheduler(int disk_num) {
-        plan.units_to_read.resize(disk_num);
+    RequestScheduler(int disk_num) : plan(disk_num) {
+        active_requests.reserve(105);
     }
-    RequestScheduler() {} 
+
+    void get_request_to_process(unordered_set<int>& new_request, int current_time, int disk_num, size_t current_max);
 
     // 添加新请求
     void add_request(int req_id, int obj_id, int time, int size) {
@@ -77,16 +79,41 @@ public:
         */
     }
     
+    // 处理本次所需请求
+    bool should_accept_new_requests(size_t current_max) {
+        // 判断是否接受新请求
+        return (plan.get_req_size() < current_max);
+    }
+
+    size_t calculate_dynamic_max(size_t disk_num);
+
     // 为每一个 req 的每一个 obj 中的块选择合适的副本
-    void schedule_round(vector<Disk>& disks, unordered_map<int, StorageObject>& objects, BatchReadPlan& plan, const int current_time, const int G);
+    void schedule_round(unordered_set<int>& new_req, unordered_map<int, StorageObject>& objects, const int current_time, const int G, const int capacity);
     
     void printf_actions(vector<Disk>& disks, unordered_map<int, StorageObject>& objects, const int G);
-    void printf_completed_request(BatchReadPlan& plan, unordered_map<int, StorageObject>& objects);
+    void printf_completed_request(unordered_map<int, StorageObject>& objects);
     void clean() { n_rsp = 0; complete_request.clear(); }
-
-
-    BatchReadPlan& get_plan() { return plan; }
+ 
     
+private:
+    double avg_latency = 0.0;       // 平均延迟
+    double disk_utilization = 0.0;  // 磁盘利用率
+    int total_processed = 0;        // 总处理请求数   
+    double last_time_cost = 0.0;    // 上一次时间片耗时  
+
+public:
+    // 记录每轮处理的请求数和耗时
+    void record_metrics(double time, int free_units_num, const int total_capacity) {
+        // 更新平均延迟
+        avg_latency = (avg_latency * total_processed + time) / plan.get_req_size();
+        total_processed = plan.get_req_size();
+
+        // 更新磁盘利用率（假设总时间已知）
+        disk_utilization = 1 - free_units_num / (double)total_capacity;
+        last_time_cost = time;
+    }
+
+
 private:
     // 动态优先级计算
     float calc_priority(int size) const {

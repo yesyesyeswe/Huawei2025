@@ -3,15 +3,21 @@
 void StorageController::process_delete(vector<int>& deleted_object_id) {
     int n_abort = 0;
     vector<int> abort_reqs;
+    vector<vector<int>> units_to_release;
+    units_to_release.resize(disks.size());
     for(int obj_id : deleted_object_id) {
         StorageObject& obj = objects[obj_id];
         vector<ObjectReplica>& replicas = obj.replicas;
+        // 磁盘清理
         for(auto& replica : replicas) {
             for(int unit_id : replica.get_units()) {
-                disks[replica.get_disk()].deallocate_space(unit_id);
-                disks[replica.get_disk()].set_unit_free(unit_id);
+                units_to_release[replica.get_disk()].push_back(unit_id); 
             }
         }
+        for(int i = 1; i < units_to_release.size(); i ++) {
+            disks[i].deallocate(units_to_release[i]);
+        }
+        // 请求清理
         for(int req_id : objects[obj_id].pending_requests) {
             if(scheduler.active_requests.count(req_id)) {
                 n_abort ++;
@@ -19,7 +25,7 @@ void StorageController::process_delete(vector<int>& deleted_object_id) {
 
                 // 删除请求
                 scheduler.active_requests.erase(req_id);
-                scheduler.get_plan().Requests_id.erase(req_id);
+                scheduler.plan.Requests_id.erase(req_id);
             }
         }
         objects.erase(obj_id);
@@ -44,46 +50,54 @@ void StorageController::process_write(int obj_id, int size, int tag) {
     printf("%d\n", obj_id);
     for(int d : selected_disks) {
         int consecutive = 0;
-        auto units = disks[d].allocate(size, obj_id, consecutive);
-        obj.add_replica(ObjectReplica(d, units, consecutive));
+        vector<int> units;
+        bool success = disks[d].allocate(size, obj_id, consecutive, units);
+        assert(success);
         printf("%d ", d);
         for(int i = 0; i < units.size(); i ++) {
             if(i != units.size() - 1) printf("%d ", units[i]);
             else printf("%d", units[i]);
         }
         printf("\n");
+        obj.add_replica(d, std::move(units), consecutive);
     }
     
     objects[obj_id] = obj;
 }
 
-void StorageController::tick(const int G) {
+
+void StorageController::tick(const int G, const int capacity) {
     // 重置磁盘令牌
     for(auto& d : disks) d.reset_tokens();
-
-    BatchReadPlan& plan = scheduler.get_plan();
     int disk_num = disks.size();
+
+    // 记录新请求
+    unordered_set<int> new_request;
+    new_request.reserve(2 * disk_num);
+
     // 若 Request 太少，则增加
-    while (plan.Requests_id.size() < std::min((size_t)disk_num, scheduler.pq.size())) {
-        if(scheduler.pq.empty()) break;
-        auto [_, req_id] = scheduler.pq.top();
-        scheduler.pq.pop();
-        if(!scheduler.active_requests.count(req_id)) continue;
-        // 忽略超时请求
-        else if(current_time - scheduler.active_requests[req_id].start_time > EXTRA_TIME) {
-            //scheduler.active_requests.erase(req_id);
-            continue;
-        }
-        plan.Requests_id.insert(req_id);
+    size_t current_max = scheduler.calculate_dynamic_max(disk_num);
+    if(scheduler.should_accept_new_requests(current_max)) {
+        scheduler.get_request_to_process(new_request, current_time, disk_num, current_max);
     }
 
+    // 计算时间
+    auto start = std::chrono::high_resolution_clock::now();
+
     // 执行请求调度
-    scheduler.schedule_round(disks, objects, plan, current_time, G);
+    scheduler.schedule_round(new_request, objects, current_time, G, capacity);
     scheduler.printf_actions(disks, objects, G);
     fflush(stdout);
 
     // 打印完成请求
-    scheduler.printf_completed_request(plan, objects);
+    scheduler.printf_completed_request(objects);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    double time_cost = std::chrono::duration<double>(end - start).count();
+    int free_unit = 0;
+    for(auto& d : disks) free_unit += d.get_free();
+    scheduler.record_metrics(time_cost, free_unit, capacity * (disk_num - 1));
+
     scheduler.clean();
 
 }

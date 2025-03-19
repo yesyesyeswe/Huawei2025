@@ -9,6 +9,11 @@
 #include "TagManage.hpp"
 #include "StorageController.hpp"
 
+// #include <iostream>
+// #include <fstream>
+// #include <sstream>
+// using namespace std;
+
 /*
 T：代表本次数据有 𝑇+105个时间片，后续输入第二阶段将循环交互 𝑇+105次。 
 M：代表对象标签数。对象标签编号为 1 ~ 𝑀。
@@ -50,7 +55,7 @@ int main()
     //         cerr << "格式错误: " << line << endl;
     //     }
     // }
-
+    //
     // file.close();
 
 
@@ -80,8 +85,8 @@ int main()
     for(int t = 1; t <= T + EXTRA_TIME; t ++) {
         // 处理时间片对齐
         controller.current_time = timestamp_action();
-        // if(controller.current_time > 1 && dataMap[controller.current_time - 1] != controller.disks[3].get_head()) {
-        //     printf("%d!=%d\n", dataMap[controller.current_time - 1], controller.disks[3].get_head());
+        // if(controller.current_time > 1 && dataMap[controller.current_time - 1] != controller.disks[10].get_head()) {
+        //     printf("%d!=%d\n", dataMap[controller.current_time - 1], controller.disks[10].get_head());
         //     assert(0);
         // }
         
@@ -119,7 +124,7 @@ int main()
         }
         
         // 推进时间
-        controller.tick(G);
+        controller.tick(G, V);
         fflush(stdout);
     }
 
