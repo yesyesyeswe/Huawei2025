@@ -19,13 +19,17 @@ using std::map;
 /******************** 请求调度系统 ********************/
 class ReadRequest {
 public:
-    int req_id;                     // 请求的 id
-    int object_id;                  // 请求物品的 id
-    int start_time;                 // 请求时间
-    set<int> completed_blocks;      // 物品大小最多 5 块
+    int req_id;                                 // 请求的 id
+    int object_id;                              // 请求物品的 id
+    int start_time;                             // 请求时间
+    unordered_set<int> completed_blocks;        // 物品大小最多 5 块
     
-    ReadRequest(int _req_id, int obj_id, int time) : req_id(_req_id) , object_id(obj_id), start_time(time) {}
-    ReadRequest() : req_id(0), object_id(0), start_time(0) {}
+    ReadRequest(int _req_id, int obj_id, int time) : req_id(_req_id) , object_id(obj_id), start_time(time) {
+        completed_blocks.reserve(5);
+    }
+    ReadRequest() : req_id(0), object_id(0), start_time(0) {
+        completed_blocks.reserve(5);
+    }
 
     bool is_completed(int total) const {
         return completed_blocks.size() == total;
@@ -61,7 +65,8 @@ public:
     vector<int> complete_request;
 
     RequestScheduler(int disk_num) : plan(disk_num) {
-        active_requests.reserve(105);
+        // 400 是随意选择的
+        active_requests.reserve(1000);
     }
 
     void get_request_to_process(unordered_set<int>& new_request, int current_time, int disk_num, size_t current_max);

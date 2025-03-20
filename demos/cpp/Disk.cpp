@@ -32,13 +32,15 @@ void Disk::set_obj_to_unit(int size, int obj_id, vector<int>& allocated_units) {
 bool Disk::allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units) {
     // 先尝试分配连续空间
     for (auto it = free_blocks.begin(); it != free_blocks.end(); it ++) {
-        int block_size = it->end - it->start + 1;
+        int start = it -> start;
+        int end = it -> end;
+        int block_size = end - start + 1;
         if (block_size >= size) {
             allocated_units.clear();
             allocated_units.resize(size);
-            std::iota(allocated_units.begin(), allocated_units.end(), it->start);
-            it->start += size;
-            if (it->start > it->end) {
+            std::iota(allocated_units.begin(), allocated_units.end(), start);
+            it -> start += size;
+            if (it -> start > end) {
                 free_blocks.erase(it);
             }
             set_obj_to_unit(size, obj_id, allocated_units);
@@ -48,20 +50,20 @@ bool Disk::allocate(int size, int obj_id, int& consecutive, vector<int>& allocat
     }
 
     std::vector<int> discrete_units;
-    std::vector<Block> new_blocks;  // 记录切割后的剩余块
+    discrete_units.reserve(size);
 
     // 遍历所有块，收集离散单元
     // 使用迭代器遍历，记录处理位置
     auto it = free_blocks.begin();
     while (it != free_blocks.end() && discrete_units.size() < size) {
         Block& block = *it;
-        int available = block.end - block.start + 1;
+        int start = block.start;
+        int end   = block.end;
+        int available = end - start + 1;
         int take = std::min(available, size - (int)discrete_units.size());
 
         // 收集离散单元
-        for (int i = 0; i < take; i ++) {
-            discrete_units.push_back(block.start + i);
-        }
+        discrete_units.insert(discrete_units.end(), start, start + take);
 
         // 更新当前块
         if (take == available) {
@@ -69,7 +71,7 @@ bool Disk::allocate(int size, int obj_id, int& consecutive, vector<int>& allocat
             it = free_blocks.erase(it);
         } else {
             // 切割出剩余块，替换当前块
-            Block remaining(block.start + take, block.end);
+            Block remaining(start + take, end);
             *it = remaining;  // 直接修改原块
             it ++;
         }
@@ -103,26 +105,26 @@ void merge_into(list<Block>& blocks, const Block& new_block) {
     }
 }
 
-void Disk::deallocate(const vector<int>& deallocate_units) {
+void Disk::deallocate(const set<int>& deallocate_units) {
     if (deallocate_units.empty()) return;
     free_size += deallocate_units.size();
 
-    // 1. 预处理输入：排序、合并连续单元
-    vector<int> sorted_units(deallocate_units);
-    std::sort(sorted_units.begin(), sorted_units.end());
-
+    // 1. 预处理输入：合并连续单元
     vector<Block> new_blocks;
-    int current_start = sorted_units[0];
-    int current_end = sorted_units[0];
-    units[sorted_units[0]].reset();
+    auto it = deallocate_units.begin();
+    int current_start = *it;
+    int current_end = current_start;
+    units[current_start].reset();
+    it ++;
 
-    for (size_t i = 1; i < sorted_units.size(); ++i) {
-        units[sorted_units[i]].reset();
-        if (sorted_units[i] == current_end + 1) {
-            current_end = sorted_units[i];
+    for (; it != deallocate_units.end(); it ++) {
+        int unit_pos = *it;
+        units[unit_pos].reset();
+        if (unit_pos == current_end + 1) {
+            current_end = unit_pos;
         } else {
             new_blocks.emplace_back(current_start, current_end);
-            current_start = current_end = sorted_units[i];
+            current_start = current_end = unit_pos;
         }
     }
     new_blocks.emplace_back(current_start, current_end);
@@ -135,15 +137,15 @@ void Disk::deallocate(const vector<int>& deallocate_units) {
     while (old_it != free_blocks.end() && new_it != new_blocks.end()) {
         // 选择较小的起始块
         if (old_it->start < new_it->start) {
-            merge_into(merged_blocks, *old_it++);
+            merge_into(merged_blocks, *old_it ++);
         } else {
-            merge_into(merged_blocks, *new_it++);
+            merge_into(merged_blocks, *new_it ++);
         }
     }
 
     // 添加剩余块
-    while (old_it != free_blocks.end()) merge_into(merged_blocks, *old_it++);
-    while (new_it != new_blocks.end()) merge_into(merged_blocks, *new_it++);
+    while (old_it != free_blocks.end()) merge_into(merged_blocks, *old_it ++);
+    while (new_it != new_blocks.end()) merge_into(merged_blocks, *new_it ++);
 
     // 3. 最终合并相邻块
     free_blocks.swap(merged_blocks);
@@ -159,12 +161,15 @@ void Disk::save_status(const int pos, const int action, const int consum) {
 bool Disk::move_to_read(int dest, string& actions) {
     int current = get_head();
     int direct_steps = (dest - current + capacity) % capacity;
-    int reverse_steps = (current - dest + capacity) % capacity;
+    int reverse_steps = capacity - direct_steps;
+    actions.reserve(actions.size() + direct_steps + 3);
+    assert(direct_steps > 0);
+
     // 如果反向更快，直接跳跃
     if(reverse_steps < direct_steps && get_current_tokens() == 0) {
         assert(actions.empty());
         save_status(dest, MOVE, max_tokens);
-        actions = "j " + std::to_string(dest);
+        actions = "j " + std::to_string(get_head());
         return true;
     }
     if(!can_perform(direct_steps)) {
@@ -177,9 +182,10 @@ bool Disk::move_to_read(int dest, string& actions) {
         }
         int new_steps = max_tokens - get_current_tokens();
         assert(new_steps >= 0);
-        actions += string(new_steps, 'p');
-        current += new_steps;
-        if(new_steps > 0) {
+        if(new_steps > 0 && direct_steps - new_steps < 64) {
+            // 提前移动是有意义的
+            actions.append(new_steps, 'p');
+            current += new_steps;
             save_status(current, MOVE, 1);   
         }
         else set_head_position(current);
@@ -188,12 +194,7 @@ bool Disk::move_to_read(int dest, string& actions) {
     }
     actions += string(direct_steps, 'p');
     consume_tokens(direct_steps);
-    set_head_position(dest);
-    // 若移动了，设定 prev 情况
-    if(dest > current) {    
-        set_prev_consum(1);
-        set_prev_action(MOVE);
-    }
+    save_status(dest, MOVE, 1);
     return false;
 }
 
@@ -215,83 +216,82 @@ bool Disk::smart_move(int dest, string& actions) {
     return move_to_read(dest, actions);
 }
 
+int Disk::calculate_read_consume() const {
+    return (get_prev_action() == MOVE) ? 64 : std::max(16, (get_prev_consum() * 8 + 9) / 10);
+}
 
-bool Disk::get_actions(vector<int>& obj_index, string& actions, vector<int>& units_read_id) {
-    // if(!can_perform(0)) return true;
+bool Disk::perform_read(int dest, string& actions, int read_consume) {
+    if (!can_perform(read_consume)) {
+        save_status(get_head(), get_prev_action(), get_prev_consum());
+        actions += '#';
+        return true;
+    }
+    actions += 'r';
+    units_read_id.push_back(dest);
+    set_prev_action(READ);
+    consume_tokens(read_consume);
+    set_prev_consum(read_consume);
+    return false;
+}
+
+bool Disk::get_actions(vector<int>& obj_index, string& actions) {
+    units_read_id.clear(); // 清空成员变量
+    actions.reserve(actions.size() + obj_index.size() * 2);
+
     int current = get_head();
-    for(int dest : obj_index) {
-        if(dest != current) {
+    
+    for (int dest : obj_index) {
+        if (dest != current) {
             set_head_position(current);
-            bool isdone = smart_move(dest, actions);
-            if(isdone) return true;
-            current = get_head();
+            if (smart_move(dest, actions)) 
+                return true; // 提前终止
+            current = get_head(); // smart_move 已更新磁头位置
+            assert(current == dest);
         }
-        assert(current == dest);
-
-        int READ_CONSUME = (get_prev_action() == MOVE) ? 64 : std::max(16, (get_prev_consum() * 8 + 9) / 10);
-
-        if(!can_perform(READ_CONSUME)) {
+        const int READ_CONSUME = calculate_read_consume();
+        if (perform_read(dest, actions, READ_CONSUME)) {
             save_status(current, get_prev_action(), get_prev_consum());
-            actions += '#';
-            return true;
+            return true; // 资源不足，终止
         }
-        actions += 'r';
-        units_read_id.push_back(current);
-        set_prev_action(READ);
-        consume_tokens(READ_CONSUME);
-        set_prev_consum(READ_CONSUME);
-        assert(current == dest);
-        current = dest + 1;
+        current = dest + 1; // Read 操作会到达下一个位置
     }
 
     set_head_position(current);
     return false;
 }
 
-void Disk::loop_requests(vector<int>& targets) {
-    int head = get_head();
-    // targets 是从 set<int> 出来的，天生有序
-    //std::sort(targets.begin(), targets.end());
-
+void Disk::loop_requests(const set<int>& targets_set, vector<int>& result) {
     // 找到第一个不小于head的位置
-    auto pivot = lower_bound(targets.begin(), targets.end(), head);
-    vector<int> forward(pivot, targets.end());
-    vector<int> backward(targets.begin(), pivot);
-    
-    // 环状处理：将后半部分接到前面
-    if(!forward.empty()) {
-        forward.insert(forward.end(), backward.begin(), backward.end());
-        targets.swap(forward);
-        return;
-    }
-    targets.swap(backward);
-    return;
+    int head = get_head();
+    auto pivot = targets_set.lower_bound(head);
+
+    // 将 pivot 到 end() 插入result
+    result.insert(result.end(), pivot, targets_set.end());
+    // 将begin()到pivot插入result
+    result.insert(result.end(),targets_set.begin(), pivot);
 }
 
 // 磁头移动调度
-string Disk::schedule_moves(const set<int>& targets_set, unordered_map<int, vector<int>>& obj_info) {
-    if (targets_set.empty()) return "#";
-    // 保证 targets 里没有重复元素
-    vector<int> targets(targets_set.begin(), targets_set.end());
-    bool isdone = false;
-    vector<int> units_read_id;
+void Disk::schedule_moves(const set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions) {
+    if (targets_set.empty()) {
+        actions += '#';
+        return;
+    }
+
+    vector<int> targets;
+    targets.reserve(targets_set.size());
+
+    // 转换为环形区域
+    loop_requests(targets_set, targets);
     
     // 使用 SCAN 算法规划路径
-    string actions;
+    bool isdone = targets.empty() || get_actions(targets, actions);
+    if (!isdone) actions += '#';
 
-    loop_requests(targets);
-
-    if(!targets.empty()) isdone |= get_actions(targets, actions, units_read_id);
-    
-    if(!isdone) {
-        actions += '#';
-        isdone = true;
-    }
-    
     for(int unit_id : units_read_id) {
         int obj_id = units[unit_id].object_id;
         int obj_block_id = units[unit_id].object_block;
-        obj_info[obj_id].push_back(obj_block_id);
+        obj_info[obj_id].emplace_back(obj_block_id);
     }
     
     assert(get_current_tokens() <= max_tokens);
@@ -300,6 +300,7 @@ string Disk::schedule_moves(const set<int>& targets_set, unordered_map<int, vect
     assert(actions.size() >= 1);
 
     reset_tokens();
+    units_read_id.clear();
 
-    return actions;
+    return;
 }

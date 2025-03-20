@@ -3,7 +3,7 @@
 void StorageController::process_delete(vector<int>& deleted_object_id) {
     int n_abort = 0;
     vector<int> abort_reqs;
-    vector<vector<int>> units_to_release;
+    vector<set<int>> units_to_release;
     units_to_release.resize(disks.size());
     for(int obj_id : deleted_object_id) {
         StorageObject& obj = objects[obj_id];
@@ -11,7 +11,7 @@ void StorageController::process_delete(vector<int>& deleted_object_id) {
         // 磁盘清理
         for(auto& replica : replicas) {
             for(int unit_id : replica.get_units()) {
-                units_to_release[replica.get_disk()].push_back(unit_id); 
+                units_to_release[replica.get_disk()].insert(unit_id); 
             }
         }
         for(int i = 1; i < units_to_release.size(); i ++) {
@@ -67,37 +67,44 @@ void StorageController::process_write(int obj_id, int size, int tag) {
 
 
 void StorageController::tick(const int G, const int capacity) {
-    // 重置磁盘令牌
-    for(auto& d : disks) d.reset_tokens();
     int disk_num = disks.size();
+    int X = 10;
+    if(current_time % X == 0) {
+        // 记录新请求
+        unordered_set<int> new_request;
+        new_request.reserve(2 * disk_num);
 
-    // 记录新请求
-    unordered_set<int> new_request;
-    new_request.reserve(2 * disk_num);
+        // 若 Request 太少，则增加
+        size_t current_max = scheduler.calculate_dynamic_max(disk_num);
+        if(scheduler.should_accept_new_requests(current_max)) {
+            scheduler.get_request_to_process(new_request, current_time, disk_num, current_max);
+        }
 
-    // 若 Request 太少，则增加
-    size_t current_max = scheduler.calculate_dynamic_max(disk_num);
-    if(scheduler.should_accept_new_requests(current_max)) {
-        scheduler.get_request_to_process(new_request, current_time, disk_num, current_max);
+        // 计算时间
+        auto start = std::chrono::high_resolution_clock::now();
+
+        // 执行请求调度
+        scheduler.schedule_round(new_request, objects, current_time, G, capacity);
+        scheduler.printf_actions(disks, objects, G);
+        fflush(stdout);
+
+        // 打印完成请求
+        scheduler.printf_completed_request(objects);
+
+        auto end = std::chrono::high_resolution_clock::now();
+        double time_cost = std::chrono::duration<double>(end - start).count();
+        int free_unit = 0;
+        for(auto& d : disks) free_unit += d.get_free();
+        scheduler.record_metrics(time_cost, free_unit, capacity * (disk_num - 1));
+
+        scheduler.clean();
     }
-
-    // 计算时间
-    auto start = std::chrono::high_resolution_clock::now();
-
-    // 执行请求调度
-    scheduler.schedule_round(new_request, objects, current_time, G, capacity);
-    scheduler.printf_actions(disks, objects, G);
-    fflush(stdout);
-
-    // 打印完成请求
-    scheduler.printf_completed_request(objects);
-
-    auto end = std::chrono::high_resolution_clock::now();
-    double time_cost = std::chrono::duration<double>(end - start).count();
-    int free_unit = 0;
-    for(auto& d : disks) free_unit += d.get_free();
-    scheduler.record_metrics(time_cost, free_unit, capacity * (disk_num - 1));
-
-    scheduler.clean();
-
+    else {
+        // 不处理读取请求
+        for(int i = 1; i < disk_num; i ++) {
+            printf("#\n");
+        }
+        printf("%d\n", 0);
+        fflush(stdout);
+    }
 }

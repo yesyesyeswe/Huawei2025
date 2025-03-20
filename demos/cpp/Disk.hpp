@@ -59,9 +59,10 @@ private:
     int prev_consum;            // 上一步消耗的令牌数
     int capacity;               // 容量
     int free_size;              // 空闲容量
+    vector<int> units_read_id;  // 本次读取的单元
     
 public:
-    list<Block> free_blocks;   // 空闲磁盘块
+    list<Block> free_blocks;    // 空闲磁盘块
     vector<DiskUnit> units;     // 磁盘单元
     
 
@@ -74,18 +75,19 @@ public:
 
     // 分配指定大小的存储空间（优先连续）
     bool allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units);
-    void deallocate(const std::vector<int>& units);
+    void deallocate(const set<int>& units);
     void merge_adjacent_blocks();
     void set_obj_to_unit(int size, int obj_id, vector<int>& allocated_units);
 
     // 将需求按环状顺序整理
-    void loop_requests(vector<int>& targets);
+    void loop_requests(const set<int>& targets_set, vector<int>& targets);
 
     // 磁头移动调度
-    string schedule_moves(const set<int>& targets_set,  unordered_map<int, vector<int>>& obj_info);
+    void schedule_moves(const set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions);
     bool move_to_read(int dest, string& actions); 
-    bool get_actions(vector<int>& obj_index, string& actions, vector<int>& units_read_id);
+    bool get_actions(vector<int>& obj_index, string& actions);
     bool smart_move(int dest, string& actions);
+    bool perform_read(int dest, string& actions, int read_consume);
 
     // Setter 方法
     // 保存最后状态
@@ -113,6 +115,7 @@ public:
     const int get_capacity() const { return capacity; }
     const int get_prev_action() const { return prev_action; }
     const int get_prev_consum() const { return prev_consum; }
+    int calculate_read_consume() const;
 
 };
 #endif

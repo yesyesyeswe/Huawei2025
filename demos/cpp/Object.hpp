@@ -5,9 +5,11 @@
 #include "Disk.hpp"
 #include <climits>
 #include <utility>
+#include <unordered_set>
 using std::max;
 using std::list;
 using std::pair;
+using std::unordered_set;
 
 /******************** 对象副本类 ********************/
 class ObjectReplica {
@@ -37,14 +39,17 @@ private:
     int size;                           // 物品大小
     int tag;                            // 物品标签
     
-    
 public:
-    vector<ObjectReplica> replicas;     // 物品副本
-    set<int> pending_requests;          // 待处理请求列表
+    vector<ObjectReplica> replicas;               // 物品副本
+    unordered_set<int> pending_requests;          // 待处理请求列表
 
-    StorageObject(int id, int sz, int tg) : object_id(id), size(sz), tag(tg) {}
+    StorageObject(int id, int sz, int tg) : object_id(id), size(sz), tag(tg) {
+        replicas.reserve(3);
+    }
 
-    StorageObject() : object_id(-1), size(-1), tag(-1) {}
+    StorageObject() : object_id(-1), size(-1), tag(-1) {
+        replicas.reserve(3);
+    }
         
     // 添加副本
     // 直接接受构造参数（完美转发）
