@@ -107,19 +107,59 @@ void RequestScheduler::schedule_round(unordered_set<int>& new_req, unordered_map
 }
 
 void RequestScheduler::printf_actions(vector<Disk>& disks, unordered_map<int, StorageObject>& objects, const int G) {
+
     // 记录读取的 obj 信息
     unordered_map<int, vector<int>> obj_info;
-    // 生成磁盘指令
-    for(size_t i = 1; i < disks.size(); i ++) {
-        if(!plan.units_to_read[i].empty()) {
-            string actions;
-            disks[i].schedule_moves(plan.units_to_read[i], obj_info, actions);
-            printf("%s\n" , actions.c_str());
-            plan.disk_head_pos[i] = disks[i].get_head();
-        } else {
-            printf("#\n");
-        }
+
+    // 定义线程间共享资源的互斥锁
+    std::mutex io_mutex;          // 保护 printf 输出
+    std::mutex obj_info_mutex;    // 保护 obj_info 的并发访问（如果需要）
+    
+    // 任务分片参数
+    const size_t num_threads = 4; // 匹配 CPU 核心数
+    const size_t total_disks = disks.size() - 1; // 假设 i 从 1 开始
+    const size_t chunk_size = (total_disks + num_threads - 1) / num_threads;
+
+    // 创建线程池
+    std::vector<std::thread> workers;
+    workers.reserve(num_threads);
+
+    for (size_t t = 0; t < num_threads; ++t) {
+        workers.emplace_back([&, t] {
+            
+            // 计算本线程处理的范围 [start, end)
+            const size_t start = 1 + t * chunk_size;
+            const size_t end = std::min(start + chunk_size, disks.size());
+            
+            // 处理本线程分配的磁盘
+            for (size_t i = start; i < end; i ++) {
+                if (!plan.units_to_read[i].empty()) {
+                    string actions;
+                    {
+                        // 如果 obj_info 需要线程安全保护
+                        //std::lock_guard<std::mutex> lock(obj_info_mutex);
+                        disks[i].schedule_moves(plan.units_to_read[i], obj_info, actions);
+                    }
+                    
+                    // 线程安全的输出
+                    {
+                        std::lock_guard<std::mutex> lock(io_mutex);
+                        printf("%s\n", actions.c_str());
+                    }
+                    
+                    // 无需锁：每个线程写不同的 disk_head_pos[i]
+                    plan.disk_head_pos[i] = disks[i].get_head();
+                } else {
+                    std::lock_guard<std::mutex> lock(io_mutex);
+                    printf("#\n");
+                }
+            }
+        });
     }
+
+    // 等待所有线程完成
+    for (auto& t : workers) t.join();
+
     // 更新请求信息
     if(!obj_info.empty()) {
         for(auto& [obj_id, obj_blocks] : obj_info) {
