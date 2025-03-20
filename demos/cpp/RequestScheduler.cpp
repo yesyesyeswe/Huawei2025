@@ -110,10 +110,7 @@ void RequestScheduler::printf_actions(vector<Disk>& disks, unordered_map<int, St
 
     // 记录读取的 obj 信息
     unordered_map<int, vector<int>> obj_info;
-
-    // 定义线程间共享资源的互斥锁
-    std::mutex io_mutex;          // 保护 printf 输出
-    std::mutex obj_info_mutex;    // 保护 obj_info 的并发访问（如果需要）
+    vector<string> disk_actions(disks.size());
     
     // 任务分片参数
     const size_t num_threads = 4; // 匹配 CPU 核心数
@@ -135,23 +132,13 @@ void RequestScheduler::printf_actions(vector<Disk>& disks, unordered_map<int, St
             for (size_t i = start; i < end; i ++) {
                 if (!plan.units_to_read[i].empty()) {
                     string actions;
-                    {
-                        // 如果 obj_info 需要线程安全保护
-                        //std::lock_guard<std::mutex> lock(obj_info_mutex);
-                        disks[i].schedule_moves(plan.units_to_read[i], obj_info, actions);
-                    }
-                    
-                    // 线程安全的输出
-                    {
-                        std::lock_guard<std::mutex> lock(io_mutex);
-                        printf("%s\n", actions.c_str());
-                    }
-                    
+                    // obj_info 内部细粒度线程安全保护
+                    disks[i].schedule_moves(plan.units_to_read[i], obj_info, actions);
+                    disk_actions[i] = actions;
                     // 无需锁：每个线程写不同的 disk_head_pos[i]
                     plan.disk_head_pos[i] = disks[i].get_head();
                 } else {
-                    std::lock_guard<std::mutex> lock(io_mutex);
-                    printf("#\n");
+                    disk_actions[i] = "#";
                 }
             }
         });
@@ -159,6 +146,10 @@ void RequestScheduler::printf_actions(vector<Disk>& disks, unordered_map<int, St
 
     // 等待所有线程完成
     for (auto& t : workers) t.join();
+
+    for(size_t i = 1; i < disk_actions.size(); i ++) {
+        printf("%s\n", disk_actions[i].c_str());
+    }
 
     // 更新请求信息
     if(!obj_info.empty()) {
