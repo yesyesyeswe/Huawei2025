@@ -88,8 +88,8 @@ void StorageController::get_busy_disks() {
             busy_disks.push_back(i);
         }
     }
-    // std::set<int> busy_disks_set(busy_disks.begin(), busy_disks.end());
-    // assert(busy_disks.size() == busy_disks_set.size());
+    std::set<int> busy_disks_set(busy_disks.begin(), busy_disks.end());
+    assert(busy_disks.size() == busy_disks_set.size());
 }
 
 void StorageController::printf_actions(const int G) {
@@ -99,21 +99,32 @@ void StorageController::printf_actions(const int G) {
     // 查找繁忙磁盘
     get_busy_disks();
 
-    // 任务分片参数
+    // 初始化动态任务队列
+    
+
+    //任务分片参数
     const size_t total_disks = busy_disks.size(); 
-    const size_t num_threads = std::min(4UL, total_disks); // 匹配 CPU 核心数
-    const size_t chunk_size = (total_disks + num_threads - 1) / num_threads;
+    const size_t num_threads = std::min(4UL, total_disks);
+    if(num_threads == 0) {
+        for(int i = 1; i < disks.size(); i ++) {
+            printf("#\n");
+        }
+        fflush(stdout);
+        return;
+    }
+    const size_t base = total_disks / num_threads;      // 每个线程基础任务数
+    const size_t remainder = total_disks % num_threads; // 额外任务数
 
     // 创建线程池
     std::vector<std::thread> workers;
     workers.reserve(num_threads);
 
     for (size_t t = 0; t < num_threads; t ++) {
-        workers.emplace_back([&, t] {
+        workers.emplace_back([&, t, base, remainder] {
             
-            // 计算本线程处理的范围 [start, end)
-            const size_t start = t * chunk_size;
-            const size_t end = std::min(start + chunk_size, total_disks);
+            // 动态计算每个线程的任务范围
+            const size_t start = t * base + std::min(t, remainder);
+            const size_t end = start + (t < remainder ? (base + 1) : base);
             
             // 处理本线程分配的磁盘
             for (size_t i = start; i < end; i ++) {

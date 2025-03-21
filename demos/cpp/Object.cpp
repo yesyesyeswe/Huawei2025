@@ -23,15 +23,17 @@ int ObjectReplica::access_cost(int head_pos, int capacity, const vector<int>& un
 }
 
 
-int StorageObject::get_best_replica_units(int block_id, const vector<int>& head_pos, int capacity, int& best_disk) {
+int StorageObject::get_best_replica_units(int block_id, const vector<int>& head_pos, int capacity, int& best_disk, const vector<int>& space_used) {
     best_disk = 0;
-    int min_cost = INT_MAX;
+    int min_cost = 9999999;
     const ObjectReplica* best_replica = nullptr;
 
     for(int rep = 0; rep < REP_NUM; rep ++) {
         const auto& replica = replicas[rep];
         const int disk_id = replica.get_disk();
         int cost = replica.access_cost(head_pos[disk_id], capacity, {replica.unit_ids[block_id]});
+        // 磁盘要处理的数据比较多时，倾向于不选择
+        cost += space_used[disk_id];
         // 优先选择连续存放的副本
         if(replica.isconsecutive()) cost -= 50;
         if(cost < min_cost) {

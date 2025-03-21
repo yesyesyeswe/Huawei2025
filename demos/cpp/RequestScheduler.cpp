@@ -13,7 +13,7 @@ size_t RequestScheduler::calculate_dynamic_max(size_t disk_num) {
         dynamic_max = std::max(dynamic_max * 2, base);
     } 
     else if(avg_latency < last_time_cost) {
-        dynamic_max = std::max(static_cast<size_t>(dynamic_max / 1.2), base);
+        dynamic_max = std::max(static_cast<size_t>(dynamic_max / 1.5), base);
     }
     // 待处理请求太多了，多处理一点
     if(pq.size() >= 105) {
@@ -40,10 +40,10 @@ void RequestScheduler::get_request_to_process(unordered_set<int>& new_request, i
             //scheduler.active_requests.erase(req_id);
             continue;
         }
-        // else if (current_time - active_requests[req_id].start_time > EXTRA_TIME / 2) {
-        //     low_value_req.push_back(req_id);
-        //     continue;
-        // }
+        else if (current_time - active_requests[req_id].start_time > EXTRA_TIME / 2) {
+            low_value_req.push_back(req_id);
+            continue;
+        }
         new_request.insert(req_id);
     }
     // 如果此时还没有足够的 req
@@ -94,6 +94,11 @@ void RequestScheduler::delete_complete_req(unordered_set<int>& reqs) {
 void RequestScheduler::schedule_round(unordered_set<int>& new_req, unordered_map<int, StorageObject>& objects, const int current_time, const int G, const int capacity) {
     auto it = new_req.begin();
     const auto& disk_head_pos = plan.disk_head_pos; // 缓存磁头位置
+    int disk_num = plan.units_to_read.size();
+    vector<int> space_used(disk_num);
+    for(int i = 1; i < disk_num; i ++) {
+        space_used[i] = plan.units_to_read[i].size();
+    }
 
     // 遍历所有的新请求
     while(it != new_req.end()) {
@@ -107,7 +112,7 @@ void RequestScheduler::schedule_round(unordered_set<int>& new_req, unordered_map
             // 选择未完成的块
             if(req.completed_blocks.count(i + 1)) continue;
             int best_disk = -1;
-            int unit_id = obj.get_best_replica_units(i, disk_head_pos, capacity, best_disk);
+            int unit_id = obj.get_best_replica_units(i, disk_head_pos, capacity, best_disk, space_used);
 
             // 因为可能有重复的物品，那么可能有重复的单元，units_to_read[best_disk] 为 set
             plan.units_to_read[best_disk].insert(unit_id);
