@@ -13,7 +13,7 @@ size_t RequestScheduler::calculate_dynamic_max(size_t disk_num) {
         dynamic_max = std::max(dynamic_max * 2, base);
     } 
     else if(avg_latency < last_time_cost) {
-        dynamic_max = std::max(static_cast<size_t>(dynamic_max / 1.5), base);
+        dynamic_max = std::max(static_cast<size_t>(dynamic_max / 1.2), base);
     }
     // 待处理请求太多了，多处理一点
     if(pq.size() >= 105) {
@@ -40,10 +40,10 @@ void RequestScheduler::get_request_to_process(unordered_set<int>& new_request, i
             //scheduler.active_requests.erase(req_id);
             continue;
         }
-        else if (current_time - active_requests[req_id].start_time > EXTRA_TIME / 2) {
-            low_value_req.push_back(req_id);
-            continue;
-        }
+        // else if (current_time - active_requests[req_id].start_time > EXTRA_TIME / 2) {
+        //     low_value_req.push_back(req_id);
+        //     continue;
+        // }
         new_request.insert(req_id);
     }
     // 如果此时还没有足够的 req

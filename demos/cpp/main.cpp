@@ -61,7 +61,7 @@ int main()
 
     int T, M, N, V, G;
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
-    StorageController controller(N + 1, G, V);
+    StorageController controller(N + 1, G, V, T);
 
      // 预处理数据加载
      auto load_fre = [M, T](vector<vector<int>>& dest) {

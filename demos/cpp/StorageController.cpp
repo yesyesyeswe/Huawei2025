@@ -160,7 +160,7 @@ void StorageController::printf_actions(const int G) {
 void StorageController::tick(const int G, const int capacity) {
     int disk_num = disks.size();
     int X = 2;
-    if(current_time % X == 0) {
+    if(current_time % X == 0 && current_time < T + 51) {
         // 记录新请求
         unordered_set<int> new_request;
         new_request.reserve(2 * disk_num);

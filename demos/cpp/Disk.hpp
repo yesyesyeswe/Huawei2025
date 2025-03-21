@@ -13,7 +13,6 @@
 #include <deque>
 #include <numeric>
 #include <list>
-#include <mutex>
 #include <thread>
 using std::vector;
 using std::queue;

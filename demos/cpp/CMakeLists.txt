@@ -13,6 +13,12 @@ aux_source_directory(./                     cur_src) # 不要修改
 
 add_executable(code_craft                   ${cur_src}) # ！！！不要修改 code_craft 名称，直接影响结果；可以根据语法在 ${cur_src} 后面追加
 
+# 启用多线程支持（关键修改）
+find_package(Threads REQUIRED)        # 添加此行，自动查找线程库
+target_link_libraries(code_craft PRIVATE 
+    ${CMAKE_THREAD_LIBS_INIT}         # 链接系统线程库（如 pthread）
+)
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -pg")
 # 以下可以根据需要增加需要链接的库
 #if (NOT WIN32)
