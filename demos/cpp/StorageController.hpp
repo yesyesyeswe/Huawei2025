@@ -2,6 +2,7 @@
 #define STORAGE_CONTROLLER_HPP
 #include "RequestScheduler.hpp"
 #include "TagManage.hpp"
+#include "DynamicTaskQueue.hpp"
 #include <utility>
 #include <algorithm>
 #include <chrono>  // 引入时间库功能

@@ -103,8 +103,8 @@ void StorageController::printf_actions(const int G) {
     
 
     //任务分片参数
-    const size_t total_disks = busy_disks.size(); 
-    const size_t num_threads = std::min(4UL, total_disks);
+    DynamicTaskQueue task_queue(busy_disks);
+    const size_t num_threads = std::min(4UL, busy_disks.size());
     if(num_threads == 0) {
         for(int i = 1; i < disks.size(); i ++) {
             printf("#\n");
@@ -112,28 +112,16 @@ void StorageController::printf_actions(const int G) {
         fflush(stdout);
         return;
     }
-    const size_t base = total_disks / num_threads;      // 每个线程基础任务数
-    const size_t remainder = total_disks % num_threads; // 额外任务数
 
-    // 创建线程池
     std::vector<std::thread> workers;
-    workers.reserve(num_threads);
-
     for (size_t t = 0; t < num_threads; t ++) {
-        workers.emplace_back([&, t, base, remainder] {
-            
-            // 动态计算每个线程的任务范围
-            const size_t start = t * base + std::min(t, remainder);
-            const size_t end = start + (t < remainder ? (base + 1) : base);
-            
-            // 处理本线程分配的磁盘
-            for (size_t i = start; i < end; i ++) {
-                int disk_id = busy_disks[i];
+        workers.emplace_back([&, local_t = t] {
+            int disk_id;
+            while (task_queue.try_get_task(disk_id)) {
                 if (!plan.units_to_read[disk_id].empty()) {
-                    string actions;
-                    disks[disk_id].schedule_moves(plan.units_to_read[disk_id], obj_info[t], actions);
+                    std::string actions;
+                    disks[disk_id].schedule_moves(plan.units_to_read[disk_id], obj_info[local_t], actions);
                     disk_actions[disk_id] = actions;
-                    // 无需锁：每个线程写不同的 disk_head_pos[disk_id]
                     plan.disk_head_pos[disk_id] = disks[disk_id].get_head();
                 } else {
                     disk_actions[disk_id] = "#";
@@ -142,7 +130,8 @@ void StorageController::printf_actions(const int G) {
         });
     }
 
-    // 等待所有线程完成
+    // 等待所有任务完成
+    task_queue.set_done();
     for (auto& t : workers) t.join();
 
     for(size_t i = 1; i < disk_actions.size(); i ++) {
