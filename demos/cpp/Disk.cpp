@@ -288,12 +288,12 @@ void Disk::schedule_moves(const set<int>& targets_set, unordered_map<int, vector
     bool isdone = targets.empty() || get_actions(targets, actions);
     if (!isdone) actions += '#';
 
-    unordered_map<int, std::mutex> obj_mutexes;
+    //unordered_map<int, std::mutex> obj_mutexes;
     for(int unit_id : units_read_id) {
         int obj_id = units[unit_id].object_id;
         int obj_block_id = units[unit_id].object_block;
         {
-            std::lock_guard<std::mutex> lock(obj_mutexes[obj_id]);
+            //std::lock_guard<std::mutex> lock(obj_mutexes[obj_id]);
             obj_info[obj_id].emplace_back(obj_block_id);
         }
     }

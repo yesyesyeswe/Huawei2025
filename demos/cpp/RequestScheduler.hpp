@@ -61,6 +61,7 @@ public:
     // 维护所有未完成的活跃读请求的哈希表（以req_id为键）
     unordered_map<int, ReadRequest> active_requests; 
     priority_queue<pair<float, int>> pq;            // 得分优先级队列
+    unordered_map<int, StorageObject> objects;      // 记录本轮读取的物品
     int n_rsp = 0;
     vector<int> complete_request;
 

@@ -108,6 +108,8 @@ void RequestScheduler::schedule_round(unordered_set<int>& new_req, unordered_map
 
 void RequestScheduler::printf_actions(vector<Disk>& disks, unordered_map<int, StorageObject>& objects, const int G) {
 
+    std::mutex obj_info_mutex;
+
     // 记录读取的 obj 信息
     unordered_map<int, vector<int>> obj_info;
     vector<string> disk_actions(disks.size());
@@ -133,7 +135,11 @@ void RequestScheduler::printf_actions(vector<Disk>& disks, unordered_map<int, St
                 if (!plan.units_to_read[i].empty()) {
                     string actions;
                     // obj_info 内部细粒度线程安全保护
-                    disks[i].schedule_moves(plan.units_to_read[i], obj_info, actions);
+                    {
+                        // 如果 obj_info 需要线程安全保护
+                        std::lock_guard<std::mutex> lock(obj_info_mutex);
+                        disks[i].schedule_moves(plan.units_to_read[i], obj_info, actions);
+                    }
                     disk_actions[i] = actions;
                     // 无需锁：每个线程写不同的 disk_head_pos[i]
                     plan.disk_head_pos[i] = disks[i].get_head();
