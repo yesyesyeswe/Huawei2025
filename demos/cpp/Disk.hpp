@@ -13,6 +13,8 @@
 #include <deque>
 #include <numeric>
 #include <list>
+#include <mutex>
+#include <thread>
 using std::vector;
 using std::queue;
 using std::deque;
@@ -64,6 +66,7 @@ private:
 public:
     list<Block> free_blocks;    // 空闲磁盘块
     vector<DiskUnit> units;     // 磁盘单元
+    
     
 
     Disk(int id, int G, int V) : disk_id(id), capacity(V), head_position(1), current_tokens(0), prev_action(MOVE), max_tokens(G), prev_consum(-1), free_size(V) {
