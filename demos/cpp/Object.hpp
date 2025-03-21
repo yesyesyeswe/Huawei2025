@@ -58,7 +58,7 @@ public:
     }
     
     // 获取最佳访问副本
-    // const ObjectReplica& get_best_replica(const vector<Disk>& disks) const;
+    int get_best_replica_units(int block_id, const vector<int>& head_pos, int capacity, int& best_disk);
     
     // 请求管理
     void add_request(int req_id) { pending_requests.insert(req_id); }

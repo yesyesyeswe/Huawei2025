@@ -34,6 +34,7 @@ public:
         scheduler.add_request(req_id, obj_id, current_time, objects[obj_id].get_size());
         objects[obj_id].add_request(req_id);
     }
+    void printf_actions(const int G);
     
     // 执行时间片调度
     void tick(const int G, const int capacity);

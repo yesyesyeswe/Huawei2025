@@ -37,7 +37,6 @@ void StorageController::process_delete(vector<int>& deleted_object_id) {
     }
 }
 
-
 void StorageController::process_write(int obj_id, int size, int tag) {
     // 选择目标磁盘
     vector<int> selected_disks;
@@ -65,6 +64,30 @@ void StorageController::process_write(int obj_id, int size, int tag) {
     objects[obj_id] = obj;
 }
 
+void StorageController::printf_actions(const int G) {
+    auto& plan = scheduler.plan;
+
+    // 记录读取的 obj 信息
+    unordered_map<int, vector<int>> obj_info;
+    // 生成磁盘指令
+    for(size_t i = 1; i < disks.size(); i ++) {
+        if(!plan.units_to_read[i].empty()) {
+            string actions;
+            disks[i].schedule_moves(plan.units_to_read[i], obj_info, actions);
+            printf("%s\n" , actions.c_str());
+            plan.disk_head_pos[i] = disks[i].get_head();
+        } else {
+            printf("#\n");
+        }
+    }
+    // 更新请求信息
+    if(!obj_info.empty()) {
+        for(auto& [obj_id, obj_blocks] : obj_info) {
+            auto& req_set = objects[obj_id].pending_requests;
+            scheduler.update_req(req_set, obj_blocks);
+        }
+    }
+}
 
 void StorageController::tick(const int G, const int capacity) {
     int disk_num = disks.size();
@@ -85,7 +108,7 @@ void StorageController::tick(const int G, const int capacity) {
 
         // 执行请求调度
         scheduler.schedule_round(new_request, objects, current_time, G, capacity);
-        scheduler.printf_actions(disks, objects, G);
+        printf_actions(G);
         fflush(stdout);
 
         // 打印完成请求

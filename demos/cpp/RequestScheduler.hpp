@@ -21,18 +21,19 @@ class ReadRequest {
 public:
     int req_id;                                 // 请求的 id
     int object_id;                              // 请求物品的 id
+    int object_size;                            // 请求物品的大小
     int start_time;                             // 请求时间
     unordered_set<int> completed_blocks;        // 物品大小最多 5 块
     
-    ReadRequest(int _req_id, int obj_id, int time) : req_id(_req_id) , object_id(obj_id), start_time(time) {
+    ReadRequest(int _req_id, int obj_id, int time, int size) : req_id(_req_id) , object_id(obj_id), object_size(size), start_time(time) {
         completed_blocks.reserve(5);
     }
     ReadRequest() : req_id(0), object_id(0), start_time(0) {
         completed_blocks.reserve(5);
     }
 
-    bool is_completed(int total) const {
-        return completed_blocks.size() == total;
+    bool is_completed() const {
+        return completed_blocks.size() == object_size;
     }
 
     bool operator<(const ReadRequest& other) const {
@@ -67,13 +68,14 @@ public:
     RequestScheduler(int disk_num) : plan(disk_num) {
         // 400 是随意选择的
         active_requests.reserve(1000);
+        complete_request.reserve(4 *  disk_num);
     }
 
     void get_request_to_process(unordered_set<int>& new_request, int current_time, int disk_num, size_t current_max);
 
     // 添加新请求
     void add_request(int req_id, int obj_id, int time, int size) {
-        active_requests[req_id] = {req_id, obj_id, time};
+        active_requests[req_id] = {req_id, obj_id, time, size};
         pq.emplace(calc_priority(size), req_id);
 
         // 将来也许可以进行动态更新
@@ -95,7 +97,10 @@ public:
     // 为每一个 req 的每一个 obj 中的块选择合适的副本
     void schedule_round(unordered_set<int>& new_req, unordered_map<int, StorageObject>& objects, const int current_time, const int G, const int capacity);
     
-    void printf_actions(vector<Disk>& disks, unordered_map<int, StorageObject>& objects, const int G);
+    // 更新请求信息
+    void update_req(unordered_set<int>& req_set, vector<int>& obj_blocks);
+    void delete_complete_req(unordered_set<int>& reqs);
+
     void printf_completed_request(unordered_map<int, StorageObject>& objects);
     void clean() { n_rsp = 0; complete_request.clear(); }
  
