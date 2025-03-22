@@ -66,6 +66,7 @@ public:
 
     // Getter 方法
     int get_size() const { return size; };
+    int get_tag() const { return tag; }
     const vector<ObjectReplica>& get_replica() const { return replicas; }
 };
 #endif

@@ -35,11 +35,17 @@ public:
     void process_delete(vector<int>& deleted_object_id);
 
     // 处理写入请求
-    void process_write(int obj_id, int size, int tag);
+    void process_write(int stage, int obj_id, int size, int tag);
     
     // 处理读取请求
-    void process_read(int req_id, int obj_id) {
-        scheduler.add_request(req_id, obj_id, current_time, objects[obj_id].get_size());
+    void process_read(int req_id, int obj_id, int stage) {
+        scheduler.add_request(
+            req_id, 
+            obj_id, 
+            current_time, 
+            objects[obj_id].get_size(), 
+            tag_manager.isHotDeleteTags(stage, objects[obj_id].get_tag())
+        );
         objects[obj_id].add_request(req_id);
     }
     // 获取繁忙磁盘

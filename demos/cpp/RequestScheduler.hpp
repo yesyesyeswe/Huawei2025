@@ -74,16 +74,14 @@ public:
     void get_request_to_process(unordered_set<int>& new_request, int current_time, int disk_num, size_t current_max);
 
     // 添加新请求
-    void add_request(int req_id, int obj_id, int time, int size) {
+    void add_request(int req_id, int obj_id, int time, int size, bool isHot_delete) {
         active_requests[req_id] = {req_id, obj_id, time, size};
-        pq.emplace(calc_priority(size), req_id);
-
-        // 将来也许可以进行动态更新
-        /*
-        if(!req.is_completed(obj.get_size())) {
-            pq.emplace(calc_priority(req.start_time), req_id);
+        float base_score = calc_priority(size);
+        if(isHot_delete) {
+            if(size == 4) base_score *= 1.02;
+            else if(size == 2 || size == 3) base_score *= 1.3;
         }
-        */
+        pq.emplace(base_score, req_id);
     }
     
     // 处理本次所需请求

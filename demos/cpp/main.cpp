@@ -64,9 +64,9 @@ int main()
      auto load_fre = [M, T](vector<vector<int>>& dest) {
         //dest.resize(M + 1); 已提前初始化
         for(int i = 1; i <= M; i ++) {
-            int slices = (T - 1) / FRE_PER_SLICING + 1;
-            //dest[i].resize(slices + 1); 已提前初始化
-            for(int j = 1; j <= slices; j ++)
+            int period = (T - 1) / FRE_PER_SLICING + 1;
+            //dest[i].resize(period + 1); 已提前初始化
+            for(int j = 1; j <= period; j ++)
                 scanf("%d", &dest[i][j]);
         }
     };
@@ -75,9 +75,17 @@ int main()
     load_fre(Tag.fre_write); 
     load_fre(Tag.fre_read);
 
+    int read_max_tags_choose = 8;
+    int delete_max_tags_choose = 8;
+    int read_slice = 4;
+    int read_future_steps = 2;
+    int delete_slice = 4;
+    int delete_future_steps = 4;
+    Tag.selectHotTagsDelete(delete_max_tags_choose, delete_slice, delete_future_steps);
+    Tag.selectHotTagsRead(read_max_tags_choose, read_slice, read_future_steps);
+
     printf("OK\n");
     fflush(stdout);
-
 
     for(int t = 1; t <= T + EXTRA_TIME; t ++) {
         // 处理时间片对齐
@@ -107,7 +115,7 @@ int main()
         for(int i = 0; i < n_write; i ++) {
             int id, size, tag;
             scanf("%d %d %d", &id, &size, &tag);
-            controller.process_write(id, size, tag);
+            controller.process_write((controller.current_time - 1) / (FRE_PER_SLICING * read_slice) + 1, id, size, tag);
         }
         fflush(stdout);
         
@@ -117,7 +125,7 @@ int main()
         for(int i = 0; i < n_read; i ++) {
             int req_id, obj_id;
             scanf("%d %d", &req_id, &obj_id);
-            controller.process_read(req_id, obj_id);
+            controller.process_read(req_id, obj_id, (controller.current_time - 1) / (FRE_PER_SLICING * delete_slice) + 1);
         }
         
         // 推进时间

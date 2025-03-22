@@ -37,11 +37,11 @@ void StorageController::process_delete(vector<int>& deleted_object_id) {
     }
 }
 
-void StorageController::process_write(int obj_id, int size, int tag) {
+void StorageController::process_write(int stage, int obj_id, int size, int tag) {
     // 选择目标磁盘
     vector<int> selected_disks;
     while(selected_disks.size() < REP_NUM) {
-        selected_disks = tag_manager.select_disk(tag, disks);
+        selected_disks = tag_manager.select_disk(stage, tag, obj_id, disks);
     }
     
     // 分配存储空间
@@ -102,10 +102,7 @@ void StorageController::printf_actions(const int G) {
     
     // 查找繁忙磁盘
     get_busy_disks();
-
-    // 初始化动态任务队列
     
-
     //任务分片参数
     DynamicTaskQueue task_queue(busy_disks);
     const size_t num_threads = std::min(4UL, busy_disks.size());
@@ -163,7 +160,7 @@ void StorageController::printf_actions(const int G) {
 
 void StorageController::tick(const int G, const int capacity) {
     int disk_num = disks.size();
-    int X = 10;
+    int X = 3;
     if(current_time % X == 0 && current_time < T + 51) {
         // 记录新请求
         unordered_set<int> new_request;
