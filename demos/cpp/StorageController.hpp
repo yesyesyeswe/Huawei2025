@@ -23,7 +23,7 @@ public:
     vector<unordered_map<int, vector<int>>> obj_info;
     vector<int> busy_disks;
 
-    StorageController(int disk_num, int disk_cap, int disk_units_num, int _T) : scheduler(disk_num), T(_T) {
+    StorageController(int disk_num, int disk_cap, int disk_units_num, int _T, int tag_num, int period) : scheduler(disk_num), T(_T), tag_manager(tag_num, period) {
         for(int i = 0; i < disk_num; i ++) {
             disks.emplace_back(i, disk_cap, disk_units_num);
         }

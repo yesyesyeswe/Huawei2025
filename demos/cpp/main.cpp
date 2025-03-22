@@ -32,10 +32,6 @@ int timestamp_action()
     return timestamp;
 }
 
-// 预处理数据存储
-vector<vector<int>> fre_del, fre_write, fre_read;
-
-
 int main()
 {
     // ifstream file("output.txt");
@@ -61,22 +57,23 @@ int main()
 
     int T, M, N, V, G;
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
-    StorageController controller(N + 1, G, V, T);
+    StorageController controller(N + 1, G, V, T, M, (T - 1) / FRE_PER_SLICING + 1);
+    TagManager& Tag = controller.tag_manager;
 
      // 预处理数据加载
      auto load_fre = [M, T](vector<vector<int>>& dest) {
-        dest.resize(M + 1);
+        //dest.resize(M + 1); 已提前初始化
         for(int i = 1; i <= M; i ++) {
             int slices = (T - 1) / FRE_PER_SLICING + 1;
-            dest[i].resize(slices + 1);
+            //dest[i].resize(slices + 1); 已提前初始化
             for(int j = 1; j <= slices; j ++)
                 scanf("%d", &dest[i][j]);
         }
     };
     
-    load_fre(fre_del);
-    load_fre(fre_write);
-    load_fre(fre_read);
+    load_fre(Tag.fre_del);
+    load_fre(Tag.fre_write); 
+    load_fre(Tag.fre_read);
 
     printf("OK\n");
     fflush(stdout);

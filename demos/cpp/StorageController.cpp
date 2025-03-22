@@ -71,13 +71,17 @@ std::unordered_map<int, std::vector<int>> merge_maps_efficient(const Maps&... ma
     (..., (total_keys += maps.size()));  // 预估键的数量（C++17 折叠表达式）
     result.reserve(total_keys);
 
-    (..., [&](const auto& map) {
+    // 显式遍历每个 map
+    auto process_map = [&result](const auto& map) {
         for (const auto& [key, vec] : map) {
             auto& target_vec = result[key];
-            target_vec.reserve(target_vec.size() + vec.size());  // 预分配 vector 空间
+            target_vec.reserve(target_vec.size() + vec.size());
             target_vec.insert(target_vec.end(), vec.begin(), vec.end());
         }
-    }(maps));
+    };
+
+    // 逐个处理参数包中的 map
+    (..., process_map(maps));  // C++17 折叠表达式
     return result;
 }
 
@@ -159,7 +163,7 @@ void StorageController::printf_actions(const int G) {
 
 void StorageController::tick(const int G, const int capacity) {
     int disk_num = disks.size();
-    int X = 2;
+    int X = 10;
     if(current_time % X == 0 && current_time < T + 51) {
         // 记录新请求
         unordered_set<int> new_request;
