@@ -263,12 +263,12 @@ bool Disk::get_actions(vector<int>& obj_index, string& actions) {
 void Disk::loop_requests(const set<int>& targets_set, vector<int>& result) {
     // 找到第一个不小于head的位置
     int head = get_head();
-    auto pivot = targets_set.lower_bound(head);
+    vector<int> targets_vector(targets_set.begin(), targets_set.end());  // 转换为 vector
+    auto pivot = lower_bound(targets_vector.begin(), targets_vector.end(), head);  // 使用 std::lower_bound
 
-    // 将 pivot 到 end() 插入result
-    result.insert(result.end(), pivot, targets_set.end());
-    // 将begin()到pivot插入result
-    result.insert(result.end(),targets_set.begin(), pivot);
+    result.reserve(targets_vector.size());
+    result.insert(result.end(), pivot, targets_vector.end());
+    result.insert(result.end(), targets_vector.begin(), pivot);
 }
 
 // 磁头移动调度

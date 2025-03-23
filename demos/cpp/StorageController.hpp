@@ -6,6 +6,7 @@
 #include <utility>
 #include <algorithm>
 #include <chrono>  // 引入时间库功能
+using std::array;
 
 
 /******************** 主系统控制器 ********************/
@@ -27,8 +28,8 @@ public:
         for(int i = 0; i < disk_num; i ++) {
             disks.emplace_back(i, disk_cap, disk_units_num);
         }
-        obj_info.resize(4);
         busy_disks.reserve(disk_num);
+        obj_info.resize(10);
     }
     
     // 处理删除请求
@@ -51,6 +52,7 @@ public:
     // 获取繁忙磁盘
     void get_busy_disks();
     void printf_actions(const int G);
+    void merge_shards(unordered_map<int, vector<int>>& global_map);
     
     // 执行时间片调度
     void tick(const int G, const int capacity);

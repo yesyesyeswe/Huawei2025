@@ -75,12 +75,12 @@ int main()
     load_fre(Tag.fre_write); 
     load_fre(Tag.fre_read);
 
-    int read_max_tags_choose = 8;
-    int delete_max_tags_choose = 8;
+    int read_max_tags_choose = 5 ;
+    int delete_max_tags_choose = 4;
     int read_slice = 4;
     int read_future_steps = 2;
     int delete_slice = 4;
-    int delete_future_steps = 4;
+    int delete_future_steps = 1;
     Tag.selectHotTagsDelete(delete_max_tags_choose, delete_slice, delete_future_steps);
     Tag.selectHotTagsRead(read_max_tags_choose, read_slice, read_future_steps);
 

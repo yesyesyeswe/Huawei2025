@@ -43,7 +43,7 @@ public:
 };
 
 struct BatchReadPlan {
-    vector<set<int>> units_to_read;                 // 本次要处理的单元
+    vector<set<int>> units_to_read;              // 本次要处理的单元
     vector<int> disk_head_pos;                      // 当前磁头位置
     unordered_set<int> Requests_id;                 // 一次处理的所有 Requests
     int total_tokens;                               // 预计消耗令牌
@@ -61,7 +61,9 @@ public:
     BatchReadPlan plan;
     // 维护所有未完成的活跃读请求的哈希表（以req_id为键）
     unordered_map<int, ReadRequest> active_requests; 
-    priority_queue<pair<float, int>> pq;            // 得分优先级队列
+    priority_queue<pair<float, int>> High_pq;             // 高质量得分优先级队列
+    priority_queue<pair<float, int>> Median_pq;           // 中质量得分优先级队列
+    priority_queue<pair<float, int>> Low_pq;              // 低质量得分优先级队列
     int n_rsp = 0;
     vector<int> complete_request;
 
@@ -79,9 +81,25 @@ public:
         float base_score = calc_priority(size);
         if(isHot_delete) {
             if(size == 4) base_score *= 1.02;
-            else if(size == 2 || size == 3) base_score *= 1.3;
+            else if(size == 2 || size == 3) base_score *= 1.1;
         }
-        pq.emplace(base_score, req_id);
+        switch (size)
+        {
+        case 5:
+            High_pq.emplace(base_score, req_id);
+            break;
+        case 4:
+        case 3:
+            Median_pq.emplace(base_score, req_id);
+            break;
+        case 2:
+        case 1:
+            Low_pq.emplace(base_score, req_id);
+            break;
+        default:
+            assert(0);
+            break;
+        }
     }
     
     // 处理本次所需请求
@@ -121,11 +139,10 @@ public:
         last_time_cost = time;
     }
 
-
 private:
     // 动态优先级计算
-    float calc_priority(int size) const {
-        return 1.0 / 2 * (size + 1) * (1 - 0.005 * size);
+    float calc_priority(float size) const {
+        return 1.0 / 2 * (size + 1);
     }
 };
 #endif

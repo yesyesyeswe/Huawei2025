@@ -1,6 +1,6 @@
 #include "Object.hpp"
 
-int ObjectReplica::access_cost(int head_pos, int capacity, const vector<int>& unit_ids) const {
+int ObjectReplica::access_cost(int head_pos, int capacity, const vector<int>& unit_ids, const int G) const {
     if(unit_ids.empty()) return INT_MAX;
     
     // 使用 SCAN 算法计算最优路径
@@ -13,9 +13,19 @@ int ObjectReplica::access_cost(int head_pos, int capacity, const vector<int>& un
     int prev = positions[0];
     for(int p : positions) {
         if(p >= prev) {
-            cost += p - prev;
+            if(p - prev > G) {
+                cost += G;
+            }
+            else {
+                cost += p - prev;
+            }
         } else {
-            cost += (capacity - prev) + p;
+            if((capacity - prev) + p > G) {
+                cost += G;
+            }
+            else {
+                cost += (capacity - prev) + p;
+            }
         }
         prev = p;
     }
@@ -23,7 +33,7 @@ int ObjectReplica::access_cost(int head_pos, int capacity, const vector<int>& un
 }
 
 
-int StorageObject::get_best_replica_units(int block_id, const vector<int>& head_pos, int capacity, int& best_disk, const vector<int>& space_used) {
+vector<int> StorageObject::get_best_replica_units(int block_id, const vector<int>& head_pos, int capacity, int& best_disk, const vector<int>& space_used, const int G) {
     best_disk = 0;
     int min_cost = 9999999;
     const ObjectReplica* best_replica = nullptr;
@@ -31,7 +41,14 @@ int StorageObject::get_best_replica_units(int block_id, const vector<int>& head_
     for(int rep = 0; rep < REP_NUM; rep ++) {
         const auto& replica = replicas[rep];
         const int disk_id = replica.get_disk();
-        int cost = replica.access_cost(head_pos[disk_id], capacity, {replica.unit_ids[block_id]});
+        int cost = 0;
+        // 整体处理或分开处理
+        if(block_id == -1) {
+            cost = replica.access_cost(head_pos[disk_id], capacity, replica.unit_ids, G);
+        }
+        else {
+            cost = replica.access_cost(head_pos[disk_id], capacity, {replica.unit_ids[block_id]}, G);
+        }
         // 磁盘要处理的数据比较多时，倾向于不选择
         cost += space_used[disk_id];
         // 优先选择连续存放的副本
@@ -42,8 +59,9 @@ int StorageObject::get_best_replica_units(int block_id, const vector<int>& head_
             best_disk = disk_id;
         }
     }
-    assert(best_disk >= 0);
-    return (*best_replica).unit_ids[block_id];
+    assert(best_disk >= 1);
+    if(block_id != -1) return {(*best_replica).unit_ids[block_id]};
+    return (*best_replica).unit_ids;
 }
 
 // const ObjectReplica& StorageObject::get_best_replica(const vector<Disk>& disks) const {

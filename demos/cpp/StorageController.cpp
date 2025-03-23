@@ -96,17 +96,20 @@ void StorageController::get_busy_disks() {
     assert(busy_disks.size() == busy_disks_set.size());
 }
 
+struct alignas(64) PaddedString {
+    std::string data;
+    char padding[64];
+};
+
+
 void StorageController::printf_actions(const int G) {
     auto& plan = scheduler.plan;
-    vector<string> disk_actions(disks.size());
+    vector<PaddedString> disk_actions(disks.size());
     
     // 查找繁忙磁盘
     get_busy_disks();
     
-    //任务分片参数
-    DynamicTaskQueue task_queue(busy_disks);
-    const size_t num_threads = std::min(4UL, busy_disks.size());
-    if(num_threads == 0) {
+    if(busy_disks.size() == 0) {
         for(int i = 1; i < disks.size(); i ++) {
             printf("#\n");
         }
@@ -114,45 +117,58 @@ void StorageController::printf_actions(const int G) {
         return;
     }
 
-    std::vector<std::thread> workers;
+    //任务分片参数
+    const size_t num_threads = std::min(4UL, busy_disks.size());
+    vector<std::thread> workers;
+    // 动态计算分片参数
+    const size_t total_disks = busy_disks.size();
+    const size_t base_chunk = total_disks / num_threads;
+    const size_t remainder = total_disks % num_threads;
+
+    size_t start_idx = 0;
     for (size_t t = 0; t < num_threads; t ++) {
-        workers.emplace_back([&, local_t = t] {
-            int disk_id;
-            while (task_queue.try_get_task(disk_id)) {
+        // 计算当前线程分配数量
+        const size_t chunk = base_chunk + (t < remainder ? 1 : 0);
+        const size_t end_idx = start_idx + chunk;
+        workers.emplace_back([&, local_t = t, local_start_idx = start_idx, local_end_idx = end_idx] {
+            for (size_t i = local_start_idx; i < local_end_idx; i ++) {
+                const int disk_id = busy_disks[i];
                 if (!plan.units_to_read[disk_id].empty()) {
                     std::string actions;
+                    actions.reserve(G + 1);
                     disks[disk_id].schedule_moves(plan.units_to_read[disk_id], obj_info[local_t], actions);
-                    disk_actions[disk_id] = actions;
+                    disk_actions[disk_id].data = actions;
                     plan.disk_head_pos[disk_id] = disks[disk_id].get_head();
                 } else {
-                    disk_actions[disk_id] = "#";
+                    disk_actions[disk_id].data = "#";
                 }
             }
         });
+        start_idx = end_idx; // 更新起始索引
     }
 
     // 等待所有任务完成
-    task_queue.set_done();
     for (auto& t : workers) t.join();
 
-    for(size_t i = 1; i < disk_actions.size(); i ++) {
-        if(disk_actions[i].empty()) {
-            printf("#\n");
+    // 合并输出缓冲
+    std::string output_buffer;
+    output_buffer.reserve(disk_actions.size() * 64);
+    for (size_t i = 1; i < disk_actions.size(); i++) {
+        if (disk_actions[i].data.empty() || disk_actions[i].data == "#") {
+            output_buffer += "#\n";
+        } else {
+            output_buffer += disk_actions[i].data + "\n";
         }
-        else printf("%s\n", disk_actions[i].c_str());
     }
+    printf("%s", output_buffer.c_str());
+    fflush(stdout);
 
-    unordered_map<int, vector<int>> obj_infos = std::move(merge_maps_efficient(obj_info[0], obj_info[1], obj_info[2], obj_info[3]));
-    
-    // 更新请求信息
-    if(!obj_infos.empty()) {
-        for(auto& [obj_id, obj_blocks] : obj_infos) {
+    // 直接使用线程局部数据更新请求
+    for (size_t t = 0; t < num_threads; t ++) {
+        for (auto& [obj_id, obj_blocks] : obj_info[t]) {
             auto& req_set = objects[obj_id].pending_requests;
             scheduler.update_req(req_set, obj_blocks);
         }
-    }  
-
-    for(size_t t = 0; t < num_threads; t ++) { 
         obj_info[t].clear();
     }
     busy_disks.clear();
@@ -160,7 +176,7 @@ void StorageController::printf_actions(const int G) {
 
 void StorageController::tick(const int G, const int capacity) {
     int disk_num = disks.size();
-    int X = 3;
+    int X = 1;
     if(current_time % X == 0 && current_time < T + 51) {
         // 记录新请求
         unordered_set<int> new_request;

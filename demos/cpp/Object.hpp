@@ -24,7 +24,7 @@ public:
         : disk_id(disk), unit_ids(std::move(units)), consecutive(cons) {}
         
     // 计算访问成本
-    int access_cost(int head_pos, int capacity, const vector<int>& unit_ids) const;
+    int access_cost(int head_pos, int capacity, const vector<int>& unit_ids, const int G) const;
     
     // Getter方法
     int get_disk() const { return disk_id; }
@@ -58,7 +58,7 @@ public:
     }
     
     // 获取最佳访问副本
-    int get_best_replica_units(int block_id, const vector<int>& head_pos, int capacity, int& best_disk, const vector<int>& space_used);
+    vector<int> get_best_replica_units(int block_id, const vector<int>& head_pos, int capacity, int& best_disk, const vector<int>& space_used, const int G);
     
     // 请求管理
     void add_request(int req_id) { pending_requests.insert(req_id); }
