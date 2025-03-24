@@ -2,36 +2,38 @@
 
 size_t RequestScheduler::calculate_dynamic_max(size_t disk_num) {
     size_t total_size = High_pq.size() + Median_pq.size() + Low_pq.size();
+    // return static_cast<size_t>(total_size * 0.7);
     // 基础值：2 * disk_num 或队列剩余容量
-    size_t base = std::min(2 * disk_num, total_size);
+    size_t base = total_size * 0.5;
 
     // 根据磁盘利用率调整
-    double utilization_factor = 1.0 - disk_utilization;
-    size_t dynamic_max = static_cast<size_t>(base * utilization_factor);
+    // double utilization_factor = 1.0 - disk_utilization;
+    // assert(utilization_factor < 1 + 1e-7);
+    // size_t dynamic_max = static_cast<size_t>(base * utilization_factor);
+    size_t dynamic_max = base;
 
-    // 根据延迟进一步调整
-    if (avg_latency > last_time_cost) {
-        dynamic_max = std::max(dynamic_max * 1.5, base * 1.0);
+    // 根据用时进一步调整
+    if (avg_latency < last_time_cost) {
+        dynamic_max = static_cast<size_t>(std::max(dynamic_max * 1.2, base * 1.0));
     } 
-    else if(avg_latency < last_time_cost) {
-        dynamic_max = std::max(static_cast<size_t>(dynamic_max / 1.5), base);
+    else if(avg_latency > last_time_cost) {
+        dynamic_max = std::min(static_cast<size_t>(dynamic_max / 1.5), base);
     }
     // 待处理请求太多了，多处理一点
     // 并且只有高优先级处理完了，才扩容低优先级的
     if(High_pq.size() >= 105) {
-        dynamic_max = static_cast<size_t>(dynamic_max * 1.2);
+        dynamic_max = static_cast<size_t>(std::min(dynamic_max * 1.2, base * 1.0));
     }
     else if(Median_pq.size() >= 105) {
-        dynamic_max = static_cast<size_t>(dynamic_max * 1.1);
+        dynamic_max = static_cast<size_t>(std::min(dynamic_max * 1.1, base * 1.0));
     }
     else if(Low_pq.size() >= 105) {
-        dynamic_max = static_cast<size_t>(dynamic_max * 1.05);
+        dynamic_max = static_cast<size_t>(std::min(dynamic_max * 1.05, base * 1.0));
     }
     return dynamic_max;
 }
 
 void RequestScheduler::get_request_to_process(unordered_set<int>& new_request, int current_time, int disk_num, size_t current_max) {
-    vector<int> low_value_req;
     int req_to_get_num = current_max - plan.get_req_size();
     while (new_request.size() < req_to_get_num) {
         if(High_pq.empty() && Median_pq.empty() && Low_pq.empty()) break;
@@ -122,7 +124,6 @@ void RequestScheduler::get_request_to_process(unordered_set<int>& new_request, i
         // 如果此时已经没有 request 了，直接结束   
         break;
     }
-    
 }
 
 void RequestScheduler::update_req(unordered_set<int>& req_set, vector<int>& obj_blocks){
@@ -193,9 +194,11 @@ void RequestScheduler::schedule_round(unordered_set<int>& new_req, unordered_map
         
         // 选择未完成的块
         int best_disk = -1;
-        vector<int> unit_id = std::move(obj.get_best_replica_units(-1, disk_head_pos, capacity, best_disk, space_used, G));
+        auto& read_set = req.completed_blocks;
+        vector<int> unit_id = std::move(obj.get_best_replica_units(-1, disk_head_pos, capacity, best_disk, space_used, read_set, G));
 
         // 因为可能有重复的物品，那么可能有重复的单元，units_to_read[best_disk] 
+        if(best_disk != -1)
         plan.units_to_read[best_disk].insert(unit_id.begin(), unit_id.end());
         
         it ++;

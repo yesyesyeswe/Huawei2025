@@ -106,6 +106,7 @@ public:
     bool should_accept_new_requests(size_t current_max) {
         // 判断是否接受新请求
         return (plan.get_req_size() < current_max);
+        //return true;
     }
 
     size_t calculate_dynamic_max(size_t disk_num);

@@ -52,7 +52,7 @@ public:
     // 获取繁忙磁盘
     void get_busy_disks();
     void printf_actions(const int G);
-    void merge_shards(unordered_map<int, vector<int>>& global_map);
+    //void merge_shards(unordered_map<int, vector<int>>& global_map);
     
     // 执行时间片调度
     void tick(const int G, const int capacity);

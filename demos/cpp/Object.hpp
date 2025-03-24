@@ -58,7 +58,16 @@ public:
     }
     
     // 获取最佳访问副本
-    vector<int> get_best_replica_units(int block_id, const vector<int>& head_pos, int capacity, int& best_disk, const vector<int>& space_used, const int G);
+    vector<int> get_best_replica_units
+    (
+        int block_id, 
+        const vector<int>& head_pos, 
+        int capacity, 
+        int& best_disk, 
+        const vector<int>& space_used, 
+        const unordered_set<int>&read_set, 
+        const int G
+    );
     
     // 请求管理
     void add_request(int req_id) { pending_requests.insert(req_id); }

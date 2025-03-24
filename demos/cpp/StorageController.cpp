@@ -202,7 +202,7 @@ void StorageController::tick(const int G, const int capacity) {
         auto end = std::chrono::high_resolution_clock::now();
         double time_cost = std::chrono::duration<double>(end - start).count();
         int free_unit = 0;
-        for(auto& d : disks) free_unit += d.get_free();
+        for(int i = 1; i < disk_num; i ++) free_unit += disks[i].get_free();
         scheduler.record_metrics(time_cost, free_unit, capacity * (disk_num - 1));
 
         scheduler.clean();

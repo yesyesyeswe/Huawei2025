@@ -33,10 +33,11 @@ int ObjectReplica::access_cost(int head_pos, int capacity, const vector<int>& un
 }
 
 
-vector<int> StorageObject::get_best_replica_units(int block_id, const vector<int>& head_pos, int capacity, int& best_disk, const vector<int>& space_used, const int G) {
+vector<int> StorageObject::get_best_replica_units(int block_id, const vector<int>& head_pos, int capacity, int& best_disk, const vector<int>& space_used, const unordered_set<int>&read_set, const int G) {
     best_disk = 0;
-    int min_cost = 9999999;
+    int min_cost = INT_MAX;
     const ObjectReplica* best_replica = nullptr;
+    if(block_id != -1 && !read_set.empty() && read_set.count(block_id)) return{};
 
     for(int rep = 0; rep < REP_NUM; rep ++) {
         const auto& replica = replicas[rep];
@@ -44,7 +45,18 @@ vector<int> StorageObject::get_best_replica_units(int block_id, const vector<int
         int cost = 0;
         // 整体处理或分开处理
         if(block_id == -1) {
-            cost = replica.access_cost(head_pos[disk_id], capacity, replica.unit_ids, G);
+            if(read_set.empty()) {
+                cost = replica.access_cost(head_pos[disk_id], capacity, replica.unit_ids, G);
+            }
+            else {
+                vector<int> units_not_read;
+                units_not_read.reserve(5);
+                for(int i = 0 ; i < get_size(); i ++) {
+                    if(!read_set.count(i + 1)) units_not_read.push_back(replica.unit_ids[i]);
+                }
+                if(units_not_read.empty()) return {};
+                cost = replica.access_cost(head_pos[disk_id], capacity, units_not_read, G);
+            }
         }
         else {
             cost = replica.access_cost(head_pos[disk_id], capacity, {replica.unit_ids[block_id]}, G);
