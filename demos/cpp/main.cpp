@@ -75,7 +75,7 @@ int main()
     load_fre(Tag.fre_write); 
     load_fre(Tag.fre_read);
 
-    int read_max_tags_choose = 5 ;
+    int read_max_tags_choose = 5;
     int delete_max_tags_choose = 4;
     int read_slice = 4;
     int read_future_steps = 2;
@@ -112,11 +112,15 @@ int main()
         // 处理写入请求
         int n_write;
         scanf("%d", &n_write);
+        vector<StorageObject> new_objs;
+        if(n_write) new_objs.reserve(n_write);
+        int stage = (controller.current_time - 1) / (FRE_PER_SLICING * read_slice) + 1;
         for(int i = 0; i < n_write; i ++) {
             int id, size, tag;
             scanf("%d %d %d", &id, &size, &tag);
-            controller.process_write((controller.current_time - 1) / (FRE_PER_SLICING * read_slice) + 1, id, size, tag);
+            new_objs.emplace_back(id, size, tag);
         }
+        if(n_write) controller.process_write_main(stage, new_objs);
         fflush(stdout);
         
         // 处理读取请求

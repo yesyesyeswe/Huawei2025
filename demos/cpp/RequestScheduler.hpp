@@ -68,9 +68,9 @@ public:
     vector<int> complete_request;
 
     RequestScheduler(int disk_num) : plan(disk_num) {
-        // 400 是随意选择的
-        active_requests.reserve(1000);
-        complete_request.reserve(4 *  disk_num);
+        // 10000 是随意选择的
+        active_requests.reserve(10000);
+        complete_request.reserve(7 *  disk_num);
     }
 
     void get_request_to_process(unordered_set<int>& new_request, int current_time, int disk_num, size_t current_max);

@@ -37,7 +37,22 @@ void StorageController::process_delete(vector<int>& deleted_object_id) {
     }
 }
 
-void StorageController::process_write(int stage, int obj_id, int size, int tag) {
+void StorageController::process_write_main(int stage, vector<StorageObject>&new_objs) {
+    // 按对象大小降序排序
+    std::sort(new_objs.begin(), new_objs.end(), [](const auto& a, const auto& b) {
+        return a.get_size() > b.get_size(); 
+    });
+
+    // 按序处理写入
+    for (auto& obj : new_objs) {
+        process_write(stage, obj);
+    }
+}
+
+void StorageController::process_write(int stage, StorageObject& obj) {
+    int tag = obj.get_tag();
+    int obj_id = obj.get_obj_id();
+    int size = obj.get_size();
     // 选择目标磁盘
     vector<int> selected_disks;
     while(selected_disks.size() < REP_NUM) {
@@ -45,7 +60,6 @@ void StorageController::process_write(int stage, int obj_id, int size, int tag) 
     }
     
     // 分配存储空间
-    StorageObject obj(obj_id, size, tag);
     printf("%d\n", obj_id);
     for(int d : selected_disks) {
         int consecutive = 0;
@@ -177,7 +191,7 @@ void StorageController::printf_actions(const int G) {
 void StorageController::tick(const int G, const int capacity) {
     int disk_num = disks.size();
     int X = 1;
-    if(current_time % X == 0 && current_time < T + 51) {
+    if(current_time % X == 0) {
         // 记录新请求
         unordered_set<int> new_request;
         new_request.reserve(2 * disk_num);

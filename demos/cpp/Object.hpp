@@ -74,8 +74,9 @@ public:
     void complete_request(int req_id) { pending_requests.erase(req_id); }
 
     // Getter 方法
-    int get_size() const { return size; };
+    int get_size() const { return size; }
     int get_tag() const { return tag; }
+    int get_obj_id() const { return object_id; }
     const vector<ObjectReplica>& get_replica() const { return replicas; }
 };
 #endif

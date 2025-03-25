@@ -36,7 +36,8 @@ public:
     void process_delete(vector<int>& deleted_object_id);
 
     // 处理写入请求
-    void process_write(int stage, int obj_id, int size, int tag);
+    void process_write_main(int stage, vector<StorageObject> &new_objs);
+    void process_write(int stage, StorageObject& obj);
     
     // 处理读取请求
     void process_read(int req_id, int obj_id, int stage) {
