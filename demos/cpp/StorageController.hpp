@@ -17,6 +17,7 @@ public:
     RequestScheduler scheduler;
     int current_time = 0;
     int T = 0;
+    int prev_stage = 1;
 
     // 记录 obj_id 和 对应的 obj
     unordered_map<int, StorageObject> objects;

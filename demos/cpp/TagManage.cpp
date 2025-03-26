@@ -73,12 +73,13 @@ void TagManager::selectHotTagsGeneric(
     unordered_map<int, set<int>>& result_store, 
     int max_num,
     int slice,
-    int future_steps
+    int future_steps,
+    double rate
 ) {
     int small_stages = period / slice + 1;
     vector<vector<int>> all_tag_sums;
 
-    Get_all_tag_accsums(data, all_tag_sums, slice, future_steps, 0.8);
+    Get_all_tag_accsums(data, all_tag_sums, slice, future_steps, rate);
 
     for(int stage = 1; stage < small_stages; stage ++) {
         // --- 计算平均值 ---

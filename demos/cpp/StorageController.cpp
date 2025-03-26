@@ -14,9 +14,7 @@ void StorageController::process_delete(vector<int>& deleted_object_id) {
                 units_to_release[replica.get_disk()].insert(unit_id); 
             }
         }
-        for(int i = 1; i < units_to_release.size(); i ++) {
-            disks[i].deallocate(units_to_release[i]);
-        }
+        
         // 请求清理
         for(int req_id : objects[obj_id].pending_requests) {
             if(scheduler.active_requests.count(req_id)) {
@@ -30,6 +28,11 @@ void StorageController::process_delete(vector<int>& deleted_object_id) {
         }
         objects.erase(obj_id);
     }
+    // bug-fixed 必须在外面
+    for(int i = 1; i < units_to_release.size(); i ++) {
+        if(units_to_release[i].empty()) continue;
+        disks[i].deallocate_main(units_to_release[i]);
+    }
     assert(n_abort == abort_reqs.size());
     printf("%d\n", n_abort);
     for(int i = 0; i < n_abort; i ++) {
@@ -38,6 +41,30 @@ void StorageController::process_delete(vector<int>& deleted_object_id) {
 }
 
 void StorageController::process_write_main(int stage, vector<StorageObject>&new_objs) {
+    
+    if(prev_stage != stage && stage <= tag_manager.period) {
+        int disk_num = disks.size();
+        prev_stage = stage;
+        // 根据 stage 调整当前热区大小
+        int require = 0;
+        auto hot_read_tag_set = tag_manager.get_hot_tag(stage); 
+        // 记录即将频繁读取的物品写入的大小
+        auto& free_write = tag_manager.fre_write;
+        int rs = tag_manager.read_slice;
+        for(int tag_id : hot_read_tag_set) {
+            for(int i = 1; i <= rs; i ++) {
+                require += free_write[tag_id][(stage - 1) * rs + i];
+            }
+        }
+        // 物品总数 * 平均大小 * 副本个数 / 磁盘个数 * 备用容量(1.2)
+        require = static_cast<int>((require * 2.5 * 3) / (disk_num - 1) * 1.2);
+
+        // 动态调整热区大小
+        for(int i = 1; i < disk_num; i ++) {
+            disks[i].adjust_hot_zone(require);
+        } 
+    }
+    
     // 按对象大小降序排序
     std::sort(new_objs.begin(), new_objs.end(), [](const auto& a, const auto& b) {
         return a.get_size() > b.get_size(); 
@@ -64,7 +91,11 @@ void StorageController::process_write(int stage, StorageObject& obj) {
     for(int d : selected_disks) {
         int consecutive = 0;
         vector<int> units;
-        bool success = disks[d].allocate(size, obj_id, consecutive, units);
+        bool success;
+        if(tag_manager.isHotReadTags(stage, tag))
+            success = disks[d].hot_allocate(size, obj_id, consecutive, units);
+        else 
+            success = disks[d].normal_allocate(size, obj_id, consecutive, units);
         assert(success);
         printf("%d ", d);
         for(int i = 0; i < units.size(); i ++) {

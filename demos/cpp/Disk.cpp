@@ -1,22 +1,172 @@
 #include "Disk.hpp"
 
-void Disk::merge_adjacent_blocks() {
-    if (free_blocks.size() == 0) return;
+void Disk::assert_not_used(int start, int end) {
+    for(int i = start; i <= end; i ++) assert(!units[i].is_used);
+}
 
-    list<Block> merged;
-    merged.emplace_back(free_blocks.front());
-
-    for (auto it = free_blocks.begin(); it != free_blocks.end(); it ++) {
-        int start = (*it).start;
-        int end = (*it).end;
-        if (merged.back().end + 1 == start) {
-            merged.back().end = end;
-        } else {
-            merged.emplace_back(start, end);
+list<Block> Disk::borrow_from_normal_zone(int need) {
+    list<Block> borrowed;
+    int total_borrowed = 0;
+    
+    // 优先借用普通区末尾空间（减少对已有分配的影响）
+    for (auto it = free_blocks.rbegin(); it != free_blocks.rend();) {
+        int start = it -> start;
+        int end = it -> end;
+        int avail = end - start + 1;
+        if (avail <= 0) { // 防御性编程：处理无效块
+            it = decltype(it)(free_blocks.erase(std::next(it).base()));
+            continue;
+        }
+        int take = min(avail, need - total_borrowed);
+        
+        
+        if (take > 0) {
+            borrowed.emplace_front(start, start + take - 1);
+            //assert_not_used(start, start + take - 1);
+            update_is_hot_unit(start, start + take - 1, true);
+            it->start += take;
+            total_borrowed += take;
+            
+            if (it->start > end) {
+                // it 往前走一个，删除 it 本来的数据
+                it = decltype(it)(free_blocks.erase(std::next(it).base()));
+            }
+            else {
+                it ++;
+            }
+            
+            if (total_borrowed >= need) break;
+        }
+        else {
+            if (total_borrowed >= need) break;
+            it ++;
         }
     }
+    return borrowed;
+}
 
-    free_blocks.swap(merged);
+void Disk::release_to_normal_zone(int release_size) {
+    // 优先释放热区末尾的连续空间
+    auto it = hot_zone_blocks.rbegin();
+    list<Block> release_blocks;
+    while (release_size > 0 && it != hot_zone_blocks.rend()) {
+        int block_size = it->end - it->start + 1;
+        
+        if (block_size <= release_size) {
+            // 整块释放
+            release_blocks.emplace_front(*it);
+            update_is_hot_unit(it->start, it->end, false);
+            //assert_not_used(it->start, it->end);
+            release_size -= block_size;
+            it = decltype(it)(hot_zone_blocks.erase(std::next(it).base()));
+        } else {
+            // 切割块
+            int new_start = it->end - release_size + 1;
+            update_is_hot_unit(new_start, it->end, false);
+            //assert_not_used(new_start, it->end);
+            release_blocks.emplace_front(new_start, it->end);
+            it->end = new_start - 1;
+            release_size = 0;
+            break;
+        }
+    }
+    // 直接合并到 free_blocks（release_blocks. 已升序）
+    free_blocks.merge(release_blocks, [](const Block& a, const Block& b) {
+        return a.start < b.start;
+    });
+    
+    // // 合并普通区的相邻块
+    // merge_adjacent_blocks();
+}
+
+
+// 计算实际借用的单元数
+int borrowed_units(const list<Block>& borrowed) {
+    int count = 0;
+    for (const auto& block : borrowed) {
+        count += block.end - block.start + 1;
+    }
+    return count;
+}
+
+void Disk::adjust_hot_zone(int new_hot_demand) {
+    // 当前热区已用空间
+    int hot_used = hot_capacity - hot_free_size;
+
+    // 约束2：需求不得超过的上限
+    int borrow_max = min(new_hot_demand, max_hot_capacity - hot_capacity);
+    
+    // 计算需要调整的空间量
+    int delta = new_hot_demand - hot_free_size;
+
+    if (delta > 0) {
+        // 需要从普通区借用空间
+        // 约束3：需求不得超过上限
+        int need_borrow = min(delta, borrow_max);
+        if(need_borrow > 0) {
+            auto borrowed = borrow_from_normal_zone(need_borrow);
+            if (!borrowed.empty()) {
+                int true_size = borrowed_units(borrowed);
+                // 这里 borrowed 是从 free_blocks 从后往前取的
+                // 并且每一个新块都插在前面,因此是有序的
+                hot_zone_blocks.merge(borrowed, [](const Block& a, const Block& b) {
+                    return a.start < b.start;
+                });    
+                hot_capacity += true_size; // 更新热区最大容量
+                hot_free_size += true_size;
+                free_size -= true_size;
+            }
+        }  
+    } else if (delta < 0) {
+        // 约束4：释放量不得使容量低于空闲空间
+        int can_release = min(-delta, hot_free_size);
+        // 约束5：释放量不得使容量低于下限
+        can_release = min(can_release, hot_capacity - min_hot_capacity);
+
+        // 可以释放到普通区的空间
+        if (can_release > 0) {
+            release_to_normal_zone(can_release);
+            hot_capacity -= can_release; // 缩小热区容量
+            hot_free_size -= can_release;
+            free_size += can_release;
+        }
+    }
+    
+    // 最终约束：确保容量不低于下限且能容纳已用数据
+    // 最终检查：不得超过上限
+    assert(hot_capacity >= std::max(min_hot_capacity, hot_used));
+    assert(hot_capacity <= max_hot_capacity);
+
+    // 定期整合碎片
+    merge_adjacent_blocks(hot_zone_blocks);
+    merge_adjacent_blocks(free_blocks);
+}
+
+
+
+void Disk::merge_adjacent_blocks(list<Block>& blocks) {
+    if (blocks.size() == 0) return;
+
+    list<Block> merged;
+    auto it = blocks.begin();
+    
+    // 避免重复处理第一个块
+    merged.push_back(*it++);
+    
+    while (it != blocks.end()) {
+        Block& last = merged.back();
+        Block current = *it;
+        
+        // 仅会相邻
+        if (current.start == last.end + 1) {
+            last.end = std::max(last.end, current.end);
+        } else {
+            merged.push_back(current);
+        }
+        ++it;
+    }
+
+    blocks.swap(merged);
 }
 
 void Disk::set_obj_to_unit(int size, int obj_id, vector<int>& allocated_units) {
@@ -29,9 +179,9 @@ void Disk::set_obj_to_unit(int size, int obj_id, vector<int>& allocated_units) {
     }
 }
 
-bool Disk::allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units) {
+bool Disk::allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units, list<Block>& blocks) {
     // 先尝试分配连续空间
-    for (auto it = free_blocks.begin(); it != free_blocks.end(); it ++) {
+    for (auto it = blocks.begin(); it != blocks.end(); it ++) {
         int start = it -> start;
         int end = it -> end;
         int block_size = end - start + 1;
@@ -41,10 +191,9 @@ bool Disk::allocate(int size, int obj_id, int& consecutive, vector<int>& allocat
             std::iota(allocated_units.begin(), allocated_units.end(), start);
             it -> start += size;
             if (it -> start > end) {
-                free_blocks.erase(it);
+                blocks.erase(it);
             }
             set_obj_to_unit(size, obj_id, allocated_units);
-            free_size -= size;
             return true;
         }
     }
@@ -54,21 +203,27 @@ bool Disk::allocate(int size, int obj_id, int& consecutive, vector<int>& allocat
 
     // 遍历所有块，收集离散单元
     // 使用迭代器遍历，记录处理位置
-    auto it = free_blocks.begin();
-    while (it != free_blocks.end() && discrete_units.size() < size) {
+    auto it = blocks.begin();
+    while (it != blocks.end() && discrete_units.size() < size) {
         Block& block = *it;
         int start = block.start;
         int end   = block.end;
         int available = end - start + 1;
-        int take = std::min(available, size - (int)discrete_units.size());
+        if (available <= 0) { // 防御性编程：处理无效块
+            assert(0);
+            continue;
+        }
+        int take = min(available, size - (int)discrete_units.size());
 
-        // 收集离散单元
-        discrete_units.insert(discrete_units.end(), start, start + take);
+        // 收集离散单元：插入 start 到 start+take-1 的连续值
+        for (int i = 0; i < take; i ++) {
+            discrete_units.push_back(start + i);
+        }
 
         // 更新当前块
         if (take == available) {
             // 整个块被分配完，删除当前块
-            it = free_blocks.erase(it);
+            it = blocks.erase(it);
         } else {
             // 切割出剩余块，替换当前块
             Block remaining(start + take, end);
@@ -85,7 +240,6 @@ bool Disk::allocate(int size, int obj_id, int& consecutive, vector<int>& allocat
 
     allocated_units = std::move(discrete_units);
     set_obj_to_unit(size, obj_id, allocated_units);
-    free_size -= size;
     return true; 
 }
 
@@ -105,9 +259,8 @@ void merge_into(list<Block>& blocks, const Block& new_block) {
     }
 }
 
-void Disk::deallocate(const set<int>& deallocate_units) {
+void Disk::deallocate(const set<int>& deallocate_units, list<Block>& blocks) {
     if (deallocate_units.empty()) return;
-    free_size += deallocate_units.size();
 
     // 1. 预处理输入：合并连续单元
     vector<Block> new_blocks;
@@ -131,10 +284,10 @@ void Disk::deallocate(const set<int>& deallocate_units) {
 
     // 2. 合并新旧块列表
     list<Block> merged_blocks;
-    auto old_it = free_blocks.begin();
+    auto old_it = blocks.begin();
     auto new_it = new_blocks.begin();
 
-    while (old_it != free_blocks.end() && new_it != new_blocks.end()) {
+    while (old_it != blocks.end() && new_it != new_blocks.end()) {
         // 选择较小的起始块
         if (old_it->start < new_it->start) {
             merge_into(merged_blocks, *old_it ++);
@@ -144,11 +297,11 @@ void Disk::deallocate(const set<int>& deallocate_units) {
     }
 
     // 添加剩余块
-    while (old_it != free_blocks.end()) merge_into(merged_blocks, *old_it ++);
+    while (old_it != blocks.end()) merge_into(merged_blocks, *old_it ++);
     while (new_it != new_blocks.end()) merge_into(merged_blocks, *new_it ++);
 
     // 3. 最终合并相邻块
-    free_blocks.swap(merged_blocks);
+    blocks.swap(merged_blocks);
 }
 
 void Disk::save_status(const int pos, const int action, const int consum) {

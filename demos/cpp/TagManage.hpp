@@ -11,10 +11,9 @@ using std::pair;
 /******************** 标签管理类 ********************/
 class TagManager {
 private:
-    int tag_num = 0;                                        // 标签个数
-    int period = 0;                                         // 流程个数
+    int tag_num = 0;                                        // 总标签个数
     unordered_map<int, set<int>> stage_hot_tags_read;       // 热门读取标签
-    unordered_map<int, set<int>> stage_hot_tags_delete;     // 热门读取标签
+    unordered_map<int, set<int>> stage_hot_tags_delete;     // 热门删除标签
     
 public:
 
@@ -23,7 +22,20 @@ public:
     vector<vector<int>> fre_write;
     vector<vector<int>> fre_read;
 
-    TagManager(int M, int _period) : tag_num(M), period(_period) {
+    int read_max_tags_choose;
+    int delete_max_tags_choose;
+    int read_slice;
+    int read_future_steps;
+    int delete_slice;
+    int delete_future_steps;
+    int period = 0;                                         // 流程个数
+
+    TagManager(
+        int M, 
+        int _period
+    ) : tag_num(M),
+        period(_period)
+    {
         fre_del.resize(tag_num + 1, std::vector<int>(period + 1, 0));
         fre_write.resize(tag_num + 1, std::vector<int>(period + 1, 0));
         fre_read.resize(tag_num + 1, std::vector<int>(period + 1, 0));
@@ -35,11 +47,11 @@ public:
     vector<int> select_disk(int stage, int tag, int obj_id, const vector<Disk>& disks);
     // 处理读取数据
     void selectHotTagsRead(int max_num, int slice, int future_steps) {
-        selectHotTagsGeneric(fre_read, stage_hot_tags_read, max_num, slice, future_steps);
+        selectHotTagsGeneric(fre_read, stage_hot_tags_read, max_num, slice, future_steps, 0.8);
     }
     // 处理删除数据
     void selectHotTagsDelete(int max_num, int slice, int future_steps) {
-        selectHotTagsGeneric(fre_del, stage_hot_tags_delete, max_num, slice, future_steps);
+        selectHotTagsGeneric(fre_del, stage_hot_tags_delete, max_num, slice, future_steps, 0.8);
     }
     bool isHotReadTags(int stage, int tag) { 
         return stage_hot_tags_read[stage].count(tag); 
@@ -47,6 +59,7 @@ public:
     bool isHotDeleteTags(int stage, int tag) { 
         return stage_hot_tags_delete[stage].count(tag); 
     }
+    set<int> get_hot_tag(int stage) { return stage_hot_tags_read[stage]; }
 
 private:
     void selectHotTagsGeneric(
@@ -54,7 +67,8 @@ private:
         unordered_map<int, set<int>>& result_store, 
         int max_num, 
         int slice, 
-        int future_steps
+        int future_steps,
+        double rate
     );
     void Get_all_tag_accsums(
         const vector<vector<int>>& data,

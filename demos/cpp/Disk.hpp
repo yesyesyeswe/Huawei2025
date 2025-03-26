@@ -8,6 +8,7 @@
 #include <set>
 #include <utility>
 #include <unordered_map>
+#include <unordered_set>
 #include "Constant.hpp"
 #include <cmath>
 #include <deque>
@@ -21,8 +22,10 @@ using std::string;
 using std::set;
 using std::pair;
 using std::unordered_map;
+using std::unordered_set;
 using std::ceil;
 using std::list;
+using std::min;
 
 #define READ 999
 #define MOVE 998
@@ -59,26 +62,144 @@ private:
     int prev_action;            // 磁头上一步操作
     int prev_consum;            // 上一步消耗的令牌数
     int capacity;               // 容量
+    int hot_capacity;           // 热门区容量
     int free_size;              // 空闲容量
+    int hot_free_size;          // 热门区空闲容量
     vector<int> units_read_id;  // 本次读取的单元
     
 public:
-    list<Block> free_blocks;    // 空闲磁盘块
-    vector<DiskUnit> units;     // 磁盘单元
+    vector<bool> is_hot_unit;       // 单元是否属于热区
+    const int min_hot_capacity;
+    const int max_hot_capacity;
+    list<Block> free_blocks;        // 空闲磁盘块
+    list<Block> hot_zone_blocks;    // 热门读取区
+    vector<DiskUnit> units;         // 磁盘单元
     
-    
+    Disk(int id, int G, int V) : 
+        disk_id(id), 
+        capacity(V), 
+        head_position(1), 
+        current_tokens(0), 
+        prev_action(MOVE), 
+        max_tokens(G), 
+        prev_consum(-1), 
+        free_size(V), 
+        min_hot_capacity(static_cast<int>(V * 0.1)), 
+        max_hot_capacity(static_cast<int>(V * 0.6))  
+        {
+            is_hot_unit.resize(V + 1);
+            fill(is_hot_unit.begin(), is_hot_unit.end(), false);
+            int hot_start = static_cast<int>(V * 0.3);
+            int hot_end = static_cast<int>(V * 0.6);
+            // [hot_start, hot_end] 标记为 true
+            fill(is_hot_unit.begin() + hot_start, is_hot_unit.begin() + hot_end + 1, true);
+            hot_capacity = hot_end - hot_start + 1;
+            hot_free_size = hot_capacity;
+            free_size = V - hot_free_size;
 
-    Disk(int id, int G, int V) : disk_id(id), capacity(V), head_position(1), current_tokens(0), prev_action(MOVE), max_tokens(G), prev_consum(-1), free_size(V) {
-        free_blocks.emplace_back(1, V);
-        for(int i = 0; i <= V; i ++) {
-            units.emplace_back(i);
+            hot_zone_blocks.emplace_back(hot_start, hot_end);
+            free_blocks.emplace_back(1, hot_start - 1);
+            free_blocks.emplace_back(hot_end + 1, V);
+
+            for(int i = 0; i <= V; i ++) {
+                units.emplace_back(i);
         }
     }
 
-    // 分配指定大小的存储空间（优先连续）
-    bool allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units);
-    void deallocate(const set<int>& units);
-    void merge_adjacent_blocks();
+    // 热门空间调整
+    void assert_not_used(int start, int end);
+    void adjust_hot_zone(int new_hot_demand);
+    list<Block> borrow_from_normal_zone(int need);
+    void release_to_normal_zone(int release_size);
+    void assert_enough_size() {
+        int count = 0;
+        for (const auto& block : free_blocks) {
+            count += block.end - block.start + 1;
+        }
+        assert(count == free_size && "not enough free_blocks size!");
+        count = 0;
+        for (const auto& block : hot_zone_blocks) {
+            count += block.end - block.start + 1;
+        }
+        assert(count == hot_free_size && "not enough hot_free_blocks size!");
+    }
+
+    // 更新热区 [start, end]
+    void update_is_hot_unit(int start, int end, bool flag) {
+        fill(is_hot_unit.begin() + start, is_hot_unit.begin() + end + 1, flag);
+    }
+
+
+    // 热门空间分配
+    bool hot_allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units) {
+        if(hot_free_size >= size && allocate(size, obj_id, consecutive, allocated_units, hot_zone_blocks)) {
+            hot_free_size -= size;
+            //assert_enough_size();
+            return true;
+        }
+        if(free_size >= size && allocate(size, obj_id, consecutive, allocated_units, free_blocks)){
+            free_size -= size;
+            //assert_enough_size();
+            return true;
+        }
+        assert(0);
+        return true;
+    }
+    // 普通分配
+    bool normal_allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units) {
+        if(free_size >= size && allocate(size, obj_id, consecutive, allocated_units, free_blocks)){
+            free_size -= size;
+            //assert_enough_size();
+            return true;
+        }
+        if(hot_free_size >= size && allocate(size, obj_id, consecutive, allocated_units, hot_zone_blocks)) {
+            hot_free_size -= size;
+            //assert_enough_size();
+            return true;
+        }
+        assert(0);
+        return false;
+    }
+
+    void deallocate_main(set<int>& units) {
+        set<int> out_hot_units;
+        set<int> in_hot_units;
+
+        // // 预分配内存减少哈希冲突
+        // out_hot_units.reserve(units.size());
+        // in_hot_units.reserve(units.size());
+
+        // 遍历分类
+        for (int unit : units) {
+            assert(unit >= 1 && unit < is_hot_unit.size());
+            if (!is_hot_unit[unit]) {
+                out_hot_units.insert(unit);
+            } else {
+                in_hot_units.insert(unit);
+            }
+        }
+        if(!in_hot_units.empty()) {
+            hot_deallocate(in_hot_units);
+        }   
+        if(!out_hot_units.empty()) {
+            normal_deallocate(out_hot_units);
+        }
+    }
+
+    // 热门空间回收
+    void hot_deallocate(const set<int>& units) {
+        deallocate(units, hot_zone_blocks);
+        hot_free_size += units.size();
+        //assert_enough_size();
+    }
+    // 普通回收
+    void normal_deallocate(const set<int>& units) {
+        deallocate(units, free_blocks);
+        free_size += units.size();
+        //assert_enough_size();
+    }
+
+    void merge_adjacent_blocks(list<Block>& blocks);
     void set_obj_to_unit(int size, int obj_id, vector<int>& allocated_units);
 
     // 将需求按环状顺序整理
@@ -111,13 +232,19 @@ public:
     
     // Getter 方法
     int get_head() const { return head_position; }
-    int get_free() const { return free_size; }
+    int get_free() const { return free_size + hot_free_size; }
     int get_disk_id() const { return disk_id; }
     const int get_current_tokens() const { return current_tokens; }
     const int get_capacity() const { return capacity; }
     const int get_prev_action() const { return prev_action; }
     const int get_prev_consum() const { return prev_consum; }
     int calculate_read_consume() const;
+    //bool inHotZone(int unit_id) const { return is_hot_unit[unit_id]; }
+
+private:
+    // 分配指定大小的存储空间（优先连续）
+    bool allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units, list<Block>& blocks);
+    void deallocate(const set<int>& units, list<Block>& blocks);
 
 };
 #endif
