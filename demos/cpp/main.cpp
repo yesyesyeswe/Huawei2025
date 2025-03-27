@@ -129,7 +129,7 @@ int main()
         for(int i = 0; i < n_read; i ++) {
             int req_id, obj_id;
             scanf("%d %d", &req_id, &obj_id);
-            controller.process_read(req_id, obj_id, (controller.current_time - 1) / (FRE_PER_SLICING * delete_slice) + 1);
+            controller.process_read(req_id, obj_id, (controller.current_time - 1) / (FRE_PER_SLICING * delete_slice) + 1, controller.current_time);
         }
         
         // 推进时间

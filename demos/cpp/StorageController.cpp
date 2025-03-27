@@ -78,6 +78,26 @@ void StorageController::process_write(int stage, StorageObject& obj) {
     objects[obj_id] = obj;
 }
 
+void StorageController::process_read(int req_id, int obj_id, int stage, int start_time) {
+    scheduler.add_request(
+        req_id, 
+        obj_id, 
+        current_time, 
+        objects[obj_id].get_size(), 
+        tag_manager.isHotDeleteTags(stage, objects[obj_id].get_tag())
+    );
+    objects[obj_id].add_request(req_id);
+    
+    for(int i = 0; i < REP_NUM; i ++) {
+        const auto& replica = objects[obj_id].replicas[i];
+        int disk_id = replica.get_disk();
+        const auto& units_id = replica.get_units();
+        disks[disk_id].add_request(units_id, start_time);
+    }
+    
+}
+
+
 template<typename... Maps>
 std::unordered_map<int, std::vector<int>> merge_maps_efficient(const Maps&... maps) {
     std::unordered_map<int, std::vector<int>> result;
@@ -110,6 +130,21 @@ void StorageController::get_busy_disks() {
     assert(busy_disks.size() == busy_disks_set.size());
 }
 
+void StorageController::delete_units_start_time() {
+    auto& complete_request = scheduler.complete_request;
+    for(int req_id : complete_request) {
+        const auto& req = scheduler.active_requests[req_id];
+        const auto& obj = objects[req.object_id];
+        const auto& replica = obj.replicas;
+        int start_time = req.start_time;
+        for(int i = 0; i < REP_NUM; i ++) {
+            int disk_id = replica[i].get_disk();
+            const auto& units_id = replica[i].get_units();
+            disks[disk_id].erase_request(units_id, start_time);
+        }
+    }
+}
+
 struct alignas(64) PaddedString {
     std::string data;
     char padding[64];
@@ -132,7 +167,7 @@ void StorageController::printf_actions(const int G) {
     }
 
     //任务分片参数
-    const size_t num_threads = std::min(4UL, busy_disks.size());
+    const size_t num_threads = std::min(1UL, busy_disks.size());
     vector<std::thread> workers;
     // 动态计算分片参数
     const size_t total_disks = busy_disks.size();
@@ -150,7 +185,8 @@ void StorageController::printf_actions(const int G) {
                 if (!plan.units_to_read[disk_id].empty()) {
                     std::string actions;
                     actions.reserve(G + 1);
-                    disks[disk_id].schedule_moves(plan.units_to_read[disk_id], obj_info[local_t], actions);
+                    // disks[disk_id].schedule_moves(plan.units_to_read[disk_id], obj_info[local_t], actions);
+                    disks[disk_id].dp_schedule_moves(plan.units_to_read[disk_id], obj_info[local_t], actions, current_time);
                     disk_actions[disk_id].data = actions;
                     plan.disk_head_pos[disk_id] = disks[disk_id].get_head();
                 } else {
@@ -186,6 +222,11 @@ void StorageController::printf_actions(const int G) {
         obj_info[t].clear();
     }
     busy_disks.clear();
+    for(int i = 1; i < disks.size(); i ++) {
+        if(!plan.units_to_read[i].empty()) {
+            plan.units_to_read[i].clear();
+        }
+    }
 }
 
 void StorageController::tick(const int G, const int capacity) {
@@ -209,6 +250,9 @@ void StorageController::tick(const int G, const int capacity) {
         scheduler.schedule_round(new_request, objects, current_time, G, capacity);
         printf_actions(G);
         fflush(stdout);
+
+        // 根据完成的请求删除 units 中的请求队列
+        delete_units_start_time();
 
         // 打印完成请求
         scheduler.printf_completed_request(objects);

@@ -33,12 +33,16 @@ class DiskUnit {
         bool is_used;       // 是否使用
         int object_id;      // 该处存放物品
         int object_block;   // 该处存放的物品块号
+        int obj_size;       // 存储的物品大小
+        set<int> start_time;     // 加入的时间（多请求）
         
-        DiskUnit(int id) : unit_id(id), is_used(false), object_id(-1), object_block(-1) {}
+        DiskUnit(int id) : unit_id(id), is_used(false), object_id(-1), object_block(-1), obj_size(-1) {}
         void reset() {
             is_used = false;
             object_id = -1;
             object_block = -1;
+            obj_size = -1;
+            start_time.clear();
         }
 };
 
@@ -79,7 +83,18 @@ public:
     bool allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units);
     void deallocate(const set<int>& units);
     void merge_adjacent_blocks();
+    
+    // 分配磁盘
     void set_obj_to_unit(int size, int obj_id, vector<int>& allocated_units);
+
+    // 添加/删除请求
+    void add_request(const vector<int>& units_id, int _start_time);
+    void erase_request(const vector<int>& units_id, int _start_time);
+
+    // 动态规划获取路径
+    double dp(int pos, int token_remains, int contin_read_times, int time, const set<int>& targets, string& actions, bool has_jump);
+    void dp_schedule_moves(const set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions, int time);
+
 
     // 将需求按环状顺序整理
     void loop_requests(const set<int>& targets_set, vector<int>& targets);

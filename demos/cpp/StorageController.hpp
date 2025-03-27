@@ -40,18 +40,11 @@ public:
     void process_write(int stage, StorageObject& obj);
     
     // 处理读取请求
-    void process_read(int req_id, int obj_id, int stage) {
-        scheduler.add_request(
-            req_id, 
-            obj_id, 
-            current_time, 
-            objects[obj_id].get_size(), 
-            tag_manager.isHotDeleteTags(stage, objects[obj_id].get_tag())
-        );
-        objects[obj_id].add_request(req_id);
-    }
+    void process_read(int req_id, int obj_id, int stage, int start_time);
     // 获取繁忙磁盘
     void get_busy_disks();
+    // 删除 units 中对应的请求
+    void delete_units_start_time();
     void printf_actions(const int G);
     //void merge_shards(unordered_map<int, vector<int>>& global_map);
     
