@@ -53,6 +53,11 @@ struct Block {
     Block(int s, int e) : start(s), end(e) {}
 };
 
+struct DpResult {
+    double profit = 0;
+    string actions;
+    vector<int> read_units;
+};
 
 class Disk {
 private:
@@ -69,6 +74,7 @@ private:
 public:
     list<Block> free_blocks;    // 空闲磁盘块
     vector<DiskUnit> units;     // 磁盘单元
+    int prev_continue_read = 0; // 上次连续读取次数
     
     
 
@@ -92,8 +98,8 @@ public:
     void erase_request(const vector<int>& units_id, int _start_time);
 
     // 动态规划获取路径
-    double dp(int pos, int token_remains, int contin_read_times, int time, const set<int>& targets, string& actions, bool has_jump);
-    void dp_schedule_moves(const set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions, int time);
+    DpResult dp(int pos, int token_remains, int contin_read_times, int time, const set<int>& targets, bool has_jump, int read_count);
+    void dp_schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions, int time);
 
 
     // 将需求按环状顺序整理
@@ -135,4 +141,5 @@ public:
     int calculate_read_consume() const;
 
 };
+
 #endif

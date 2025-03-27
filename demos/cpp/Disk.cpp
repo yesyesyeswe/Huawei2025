@@ -299,24 +299,25 @@ double calculate_time_profit(int time_gap) {
 }
 
 
-double Disk::dp(int pos, int token_remains, int contin_read_times, int time, const set<int>& targets, string& actions, bool has_jump) {
-    if(token_remains <= 0) return 0;
-    if(units_read_id.size() == targets.size()) return 0;
+DpResult Disk::dp(int pos, int token_remains, int contin_read_times, int time, const set<int>& targets, bool has_jump, int read_count) {
+    if(token_remains <= 0) return {};
+    if(read_count == targets.size()) return {};
     if(pos > capacity) pos = pos % capacity;
-    double jump = -1, pass = -1, read = -1;
+    DpResult current_result, read_result, jump_result, pass_result;
     int jump_target = 0;
     if(token_remains == max_tokens && !has_jump) {
         double current_max = -99999;
         for(int target : targets) {
-            if(target - pos <= max_tokens - 64) continue;
-            double current_score = dp(target, max_tokens, 0, time + 1, targets, actions, true);
-            if(current_score > current_max) {
-                current_max = current_score;
+            if(target - pos <= max_tokens - 64 && target >= pos) continue;
+            auto result = dp(target, max_tokens, 0, time + 1, targets, true, 0);
+            if(result.profit > current_max) {
+                jump_result = result;
+                current_max = result.profit;
                 jump_target = target;
             }
         }
         // 0.5 为惩罚项
-        jump = current_max * 0.5;
+        jump_result.profit = jump_result.profit * 0.5;
     }
     // 有需求
     int read_consume = 64;
@@ -330,56 +331,76 @@ double Disk::dp(int pos, int token_remains, int contin_read_times, int time, con
             for(int start_time : start_times) {
                 profit += 0.5 * (size + 1) * calculate_time_profit(time - start_time) / size;
             }
-            units_read_id.push_back(pos);
-            read = profit + dp(pos + 1, token_remains - read_consume, contin_read_times + 1, time, targets, actions, false);
+            read_result = dp(pos + 1, token_remains - read_consume, contin_read_times + 1, time, targets, has_jump, read_count + 1);
+            read_result.profit += profit;
+            read_result.actions = "r" + read_result.actions;
         }
         if(token_remains > 64) {
-            pass = dp(pos + 1, token_remains - 1, 0, time, targets, actions, false);
+            pass_result = dp(pos + 1, token_remains - 1, 0, time, targets, has_jump, read_count);
+            pass_result.actions = "p" + pass_result.actions;
         }
     }
     else {
         if(token_remains >= 1) {
-            pass = dp(pos + 1, token_remains - 1, 0, time, targets, actions, false);
+            pass_result = dp(pos + 1, token_remains - 1, 0, time, targets, has_jump, read_count);
+            pass_result.actions = "p" + pass_result.actions;
         }
     }
 
+    double jump = jump_result.profit;
+    double read = read_result.profit;
+    double pass = pass_result.profit;
+
     double max_profit = std::max({jump, read, pass});
+    if(std::abs(max_profit) < 1e-7) return {};
     if(token_remains >= read_consume && std::abs(max_profit - read) < 1e-7) {
-        actions = "r" + actions;
+        current_result = read_result;
+        if(!has_jump) current_result.read_units.push_back(pos);
     }
     else if(token_remains >= 1 && std::abs(max_profit - pass) < 1e-7) {
-        actions = "p" + actions;
+        current_result = pass_result;
     }
     else if(token_remains == max_tokens && std::abs(max_profit - jump) < 1e-7) {
-        actions = "j " + std::to_string(jump_target);
-        set_head_position(jump_target);
-        return -1; // 表明要跳跃
+        current_result = jump_result;
+        current_result.actions = "j " + std::to_string(pos);
     }
-    return max_profit;
+    return current_result;
 }
 
 
 // 磁头移动调度（版本 2）
-void Disk::dp_schedule_moves(const set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions, int time) {
+void Disk::dp_schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions, int time) {
     if (targets_set.empty()) {
         actions += '#';
         return;
     }
     int head = get_head();
 
-    double profit = dp(head, max_tokens, 0, time, targets_set, actions, false);
+    // bug: 要记录上次连续读取的时间
+    auto result = dp(head, max_tokens, prev_continue_read, time, targets_set, false, 0);
 
     // 非跳跃
-    if(profit >= 0) {
-        int new_head = head + actions.size();
+    if(!result.actions.empty() && !(result.actions[0] == 'j') || result.actions.empty()) {
+        int new_head = head + result.actions.size();
         if(new_head > capacity) new_head %= capacity;
         set_head_position(new_head);
-        actions += "#";
+        result.actions += "#";
+        units_read_id = result.read_units;
     }
+    else {
+        string pos_string = result.actions.substr(2);
+        int new_head = std::stoi(pos_string);         // 将字符串转换为整数
+        set_head_position(new_head);
+        units_read_id = result.read_units;
+        
+    }
+    actions = result.actions;
+
     for(int unit_id : units_read_id) {
         int obj_id = units[unit_id].object_id;
         int obj_block_id = units[unit_id].object_block;
         obj_info[obj_id].emplace_back(obj_block_id);
+        targets_set.erase(unit_id);
     }
     
     assert(get_head() <= capacity && get_head() >= 1);

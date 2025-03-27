@@ -51,7 +51,7 @@ int main()
     //         cerr << "格式错误: " << line << endl;
     //     }
     // }
-    //
+    
     // file.close();
 
 
@@ -90,8 +90,9 @@ int main()
     for(int t = 1; t <= T + EXTRA_TIME; t ++) {
         // 处理时间片对齐
         controller.current_time = timestamp_action();
-        // if(controller.current_time > 1 && dataMap[controller.current_time - 1] != controller.disks[10].get_head()) {
-        //     printf("%d!=%d\n", dataMap[controller.current_time - 1], controller.disks[10].get_head());
+        // if(controller.current_time > 1 && dataMap[controller.current_time - 1] != controller.disks[1].get_head()) {
+        //     printf("%d!=%d\n", dataMap[controller.current_time - 1], controller.disks[1].get_head());
+        //     fflush(stdout);
         //     assert(0);
         // }
         
