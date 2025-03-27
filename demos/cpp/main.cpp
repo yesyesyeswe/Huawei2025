@@ -57,7 +57,7 @@ int main()
 
     int T, M, N, V, G;
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
-    int read_max_tags_choose = 8;
+    int read_max_tags_choose = 5;
     int delete_max_tags_choose = 4;
     int read_slice = 4;
     int read_future_steps = 2;

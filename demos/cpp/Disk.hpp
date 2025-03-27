@@ -85,7 +85,7 @@ public:
         prev_consum(-1), 
         free_size(V), 
         min_hot_capacity(static_cast<int>(V * 0.1)), 
-        max_hot_capacity(static_cast<int>(V * 0.6))  
+        max_hot_capacity(static_cast<int>(V * 0.75))  
         {
             is_hot_unit.resize(V + 1);
             fill(is_hot_unit.begin(), is_hot_unit.end(), false);
@@ -206,7 +206,7 @@ public:
     void loop_requests(const set<int>& targets_set, vector<int>& targets);
 
     // 磁头移动调度
-    void schedule_moves(const set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions);
+    void schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions);
     bool move_to_read(int dest, string& actions); 
     bool get_actions(vector<int>& obj_index, string& actions);
     bool smart_move(int dest, string& actions);

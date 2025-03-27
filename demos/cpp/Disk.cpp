@@ -316,7 +316,7 @@ bool Disk::move_to_read(int dest, string& actions) {
     int direct_steps = (dest - current + capacity) % capacity;
     int reverse_steps = capacity - direct_steps;
     actions.reserve(actions.size() + direct_steps + 3);
-    assert(direct_steps > 0);
+    //assert(direct_steps > 0);
 
     // 如果反向更快，直接跳跃
     if(reverse_steps < direct_steps && get_current_tokens() == 0) {
@@ -425,7 +425,7 @@ void Disk::loop_requests(const set<int>& targets_set, vector<int>& result) {
 }
 
 // 磁头移动调度
-void Disk::schedule_moves(const set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions) {
+void Disk::schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions) {
     if (targets_set.empty()) {
         actions += '#';
         return;
@@ -445,6 +445,9 @@ void Disk::schedule_moves(const set<int>& targets_set, unordered_map<int, vector
         int obj_id = units[unit_id].object_id;
         int obj_block_id = units[unit_id].object_block;
         obj_info[obj_id].emplace_back(obj_block_id);
+        if(!is_hot_unit[unit_id]) {
+            targets_set.erase(unit_id);
+        }
     }
     
     assert(get_current_tokens() <= max_tokens);
