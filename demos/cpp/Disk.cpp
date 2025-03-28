@@ -298,6 +298,161 @@ double calculate_time_profit(int time_gap) {
     return 0;
 }
 
+bool is_approx_equal_rel(double a, double b) {
+    return std::abs(a - b) < 1e-9;
+}
+
+DpResult Disk::nr_dp(int pos, int token_remains, int contin_read_times, int time, const set<int>& targets, bool has_jump, int read_count) {
+    struct StackFrame {
+        DpKey key;
+        bool isProcessed;
+        DpResult result;
+        DpResult jump_result;
+        DpResult read_result;
+        DpResult pass_result;
+        int jump_target;
+        int read_consume;
+    };
+    
+    stack<StackFrame> stack;
+    DpKey initial_key{pos, token_remains, contin_read_times, time, has_jump, read_count};
+    stack.push({initial_key, false, {}, {}, {}, {}, 0, 0});
+
+    while (!stack.empty()) {
+        auto& frame = stack.top();
+        auto key = frame.key;
+        
+        if (auto it = memo.find(key); it != memo.end()) {
+            stack.pop();
+            continue;
+        }
+        
+        if (!frame.isProcessed) {
+            // Base cases
+            if (key.token_remains <= 0 || key.read_count == targets.size()) {
+                memo[key] = {};
+                stack.pop();
+                continue;
+            }
+            
+            frame.isProcessed = true;
+            
+            // Process jump
+            if (key.token_remains == max_tokens && !key.has_jump) {
+                auto it = targets.lower_bound(key.pos + max_tokens - 64);
+                if (it != targets.end()) frame.jump_target = *it;
+                else if (!targets.empty()) frame.jump_target = *targets.begin();
+                
+                if (frame.jump_target > 0) {
+                    DpKey jump_key{frame.jump_target, max_tokens, 0, key.time + 1, true, 0};
+                    stack.push({jump_key, false, {}, {}, {}, {}, 0, 0});
+                }
+            }
+            
+            // Process read
+            if (targets.count(key.pos)) {
+                frame.read_consume = (key.contin_read_times >= 8) ? 16 : require_token[key.contin_read_times];
+                if (key.token_remains >= frame.read_consume) {
+                    DpKey read_key{key.pos % capacity + 1, 
+                                  key.token_remains - frame.read_consume,
+                                  key.contin_read_times + 1,
+                                  key.time,
+                                  key.has_jump,
+                                  key.read_count + 1};
+                    stack.push({read_key, false, {}, {}, {}, {}, 0, 0});
+                }
+            }
+            
+            // Process pass
+            if (key.token_remains > 0) {
+                auto it = targets.lower_bound(key.pos);
+                if (it != targets.end() && (*it - key.pos) <= key.token_remains) {
+                    DpKey pass_key{key.pos % capacity + 1,
+                                   key.token_remains - 1,
+                                   0,
+                                   key.time,
+                                   key.has_jump,
+                                   key.read_count};
+                    stack.push({pass_key, false, {}, {}, {}, {}, 0, 0});
+                }
+            }
+        } else {
+            // Post-processing after children are resolved
+            frame.result = {};
+            
+            // Collect jump result
+            if (frame.jump_target > 0) {
+                DpKey jump_key{frame.jump_target, max_tokens, 0, key.time + 1, true, 0};
+                // 当触发边界条件/没有进入该循环时，不满足条件
+                // 逻辑正确，因为这种情况为空 struct
+                if (auto it = memo.find(jump_key); it != memo.end()) {
+                    frame.jump_result = it->second;
+                    frame.jump_result.profit *= 0.5;
+                    frame.jump_result.actions = "j " + std::to_string(frame.jump_target);
+                }
+            }
+            
+            // Collect read result
+            if (targets.count(key.pos) && key.token_remains >= frame.read_consume) {
+                DpKey read_key{key.pos % capacity + 1,
+                              key.token_remains - frame.read_consume,
+                              key.contin_read_times + 1,
+                              key.time,
+                              key.has_jump,
+                              key.read_count + 1};
+                if (auto it = memo.find(read_key); it != memo.end()) {
+                    frame.read_result = it->second;
+                    
+                    // Calculate read profit
+                    double profit = 0;
+                    const auto& unit = units[key.pos];
+                    for (int start_time : unit.start_time) {
+                        profit += 0.5 * (unit.obj_size + 1) * 
+                                calculate_time_profit(key.time - start_time) / unit.obj_size;
+                    }
+                    frame.read_result.profit += profit;
+                    frame.read_result.actions = "r" + frame.read_result.actions;
+                    if (!key.has_jump) {
+                        frame.read_result.read_units.push_back(key.pos);
+                    }
+                }
+            }
+            
+            // Collect pass result
+            DpKey pass_key{key.pos % capacity + 1 ,
+                          key.token_remains - 1,
+                          0,
+                          key.time,
+                          key.has_jump,
+                          key.read_count};
+            if (auto it = memo.find(pass_key); it != memo.end()) {
+                frame.pass_result = it->second;
+                frame.pass_result.actions = "p" + frame.pass_result.actions;
+            }
+            
+            // Determine best result
+            double max_profit = max({frame.jump_result.profit, 
+                                   frame.read_result.profit,
+                                   frame.pass_result.profit});
+                                   
+            if (max_profit > 1e-7) {
+                if (is_approx_equal_rel(frame.read_result.profit, max_profit)) {
+                    frame.result = frame.read_result;
+                } else if (is_approx_equal_rel(frame.pass_result.profit, max_profit)) {
+                    frame.result = frame.pass_result;
+                } else {
+                    frame.result = frame.jump_result;
+                }
+            }
+            
+            memo[key] = frame.result;
+            stack.pop();
+        }
+    }
+    
+    return memo[initial_key];
+}
+
 
 DpResult Disk::dp(int pos, int token_remains, int contin_read_times, int time, const set<int>& targets, bool has_jump, int read_count) {
     DpKey key{pos, token_remains, contin_read_times, time, has_jump, read_count};
@@ -320,7 +475,7 @@ DpResult Disk::dp(int pos, int token_remains, int contin_read_times, int time, c
             jump_target = target;
         }
         else if (!targets.empty()) {
-            auto rit = targets.rbegin();
+            auto rit = targets.begin();
             jump_result = dp(*rit, max_tokens, 0, time + 1, targets, true, 0);
             jump_result.profit *= 0.5;
             jump_target = *rit;
@@ -342,21 +497,15 @@ DpResult Disk::dp(int pos, int token_remains, int contin_read_times, int time, c
             read_result.profit += profit;
             read_result.actions = "r" + read_result.actions;
         }
-        if(token_remains > 64) {
+    }
+    if(token_remains >= 1) {
+        auto it = targets.lower_bound(pos); // 使用成员函数 lower_bound
+        if(it != targets.end() && *it - pos <= token_remains) {
             pass_result = dp(pos + 1, token_remains - 1, 0, time, targets, has_jump, read_count);
             pass_result.actions = "p" + pass_result.actions;
         }
     }
-    else {
-        if(token_remains >= 1) {
-            auto it = targets.lower_bound(pos); // 使用成员函数 lower_bound
-            if(it == targets.end() || *it - pos > token_remains) {
-                return {};
-            }
-            pass_result = dp(pos + 1, token_remains - 1, 0, time, targets, has_jump, read_count);
-            pass_result.actions = "p" + pass_result.actions;
-        }
-    }
+    
 
     double jump = jump_result.profit;
     double read = read_result.profit;
@@ -373,7 +522,7 @@ DpResult Disk::dp(int pos, int token_remains, int contin_read_times, int time, c
     }
     else if(token_remains == max_tokens && std::abs(max_profit - jump) < 1e-7) {
         current_result = jump_result;
-        current_result.actions = "j " + std::to_string(pos);
+        current_result.actions = "j " + std::to_string(jump_target);
     }
     memo[key] = current_result;
     return current_result;
@@ -389,7 +538,7 @@ void Disk::dp_schedule_moves(set<int>& targets_set, unordered_map<int, vector<in
     int head = get_head();
 
     // bug: 要记录上次连续读取的时间
-    auto result = dp(head, max_tokens, prev_continue_read, time, targets_set, false, 0);
+    auto result = nr_dp(head, max_tokens, prev_continue_read, time, targets_set, false, 0);
 
     // 非跳跃
     if(!result.actions.empty() && !(result.actions[0] == 'j') || result.actions.empty()) {
@@ -419,6 +568,7 @@ void Disk::dp_schedule_moves(set<int>& targets_set, unordered_map<int, vector<in
     assert(actions.size() >= 1);
 
     units_read_id.clear();
+    memo.clear();
 
     return;
 }

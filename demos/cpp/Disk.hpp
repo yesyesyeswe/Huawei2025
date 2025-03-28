@@ -15,6 +15,8 @@
 #include <list>
 #include <thread>
 #include <map>
+#include <stack>
+#include <tuple>
 using std::vector;
 using std::queue;
 using std::deque;
@@ -24,6 +26,9 @@ using std::pair;
 using std::unordered_map;
 using std::ceil;
 using std::list;
+using std::min;
+using std::max;
+using std::stack;
 
 #define READ 999
 #define MOVE 998
@@ -114,6 +119,7 @@ public:
 
     // 动态规划获取路径
     DpResult dp(int pos, int token_remains, int contin_read_times, int time, const set<int>& targets, bool has_jump, int read_count);
+    DpResult nr_dp(int pos, int token_remains, int contin_read_times, int time, const set<int>& targets, bool has_jump, int read_count);
     void dp_schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions, int time);
 
 
