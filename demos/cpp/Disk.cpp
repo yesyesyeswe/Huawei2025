@@ -316,7 +316,6 @@ bool Disk::move_to_read(int dest, string& actions) {
     int direct_steps = (dest - current + capacity) % capacity;
     int reverse_steps = capacity - direct_steps;
     actions.reserve(actions.size() + direct_steps + 3);
-    assert(direct_steps > 0);
 
     // 如果反向更快，直接跳跃
     if(reverse_steps < direct_steps && get_current_tokens() == 0) {

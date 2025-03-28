@@ -1,7 +1,7 @@
 #include "RequestScheduler.hpp"
 
 size_t RequestScheduler::calculate_dynamic_max(size_t disk_num) {
-    size_t total_size = High_pq.size() + Median_pq.size() + Low_pq.size();
+    size_t total_size = High_pq.size() + Median_pq.size() + Low_pq.size() + plan.get_req_size();
     // return static_cast<size_t>(total_size * 0.7);
     // 基础值：2 * disk_num 或队列剩余容量
     size_t base = total_size * 0.5;
