@@ -14,6 +14,7 @@
 #include <numeric>
 #include <list>
 #include <thread>
+#include <map>
 using std::vector;
 using std::queue;
 using std::deque;
@@ -70,13 +71,27 @@ private:
     int capacity;               // 容量
     int free_size;              // 空闲容量
     vector<int> units_read_id;  // 本次读取的单元
+
+    struct DpKey {
+        int pos;
+        int token_remains;
+        int contin_read_times;
+        int time;
+        bool has_jump;
+        int read_count;
+
+        bool operator<(const DpKey& other) const {
+            return std::tie(pos, token_remains, contin_read_times, time, has_jump, read_count) <
+                   std::tie(other.pos, other.token_remains, other.contin_read_times, 
+                            other.time, other.has_jump, other.read_count);
+        }
+    };
     
 public:
     list<Block> free_blocks;    // 空闲磁盘块
     vector<DiskUnit> units;     // 磁盘单元
     int prev_continue_read = 0; // 上次连续读取次数
-    
-    
+    std::map<DpKey, DpResult> memo;
 
     Disk(int id, int G, int V) : disk_id(id), capacity(V), head_position(1), current_tokens(0), prev_action(MOVE), max_tokens(G), prev_consum(-1), free_size(V) {
         free_blocks.emplace_back(1, V);

@@ -300,24 +300,31 @@ double calculate_time_profit(int time_gap) {
 
 
 DpResult Disk::dp(int pos, int token_remains, int contin_read_times, int time, const set<int>& targets, bool has_jump, int read_count) {
+    DpKey key{pos, token_remains, contin_read_times, time, has_jump, read_count};
+    // 记忆化检查
+    if (auto it = memo.find(key); it != memo.end()) {
+        return it->second;
+    }
+
     if(token_remains <= 0) return {};
     if(read_count == targets.size()) return {};
     if(pos > capacity) pos = pos % capacity;
     DpResult current_result, read_result, jump_result, pass_result;
     int jump_target = 0;
     if(token_remains == max_tokens && !has_jump) {
-        double current_max = -99999;
-        for(int target : targets) {
-            if(target - pos <= max_tokens - 64 && target >= pos) continue;
-            auto result = dp(target, max_tokens, 0, time + 1, targets, true, 0);
-            if(result.profit > current_max) {
-                jump_result = result;
-                current_max = result.profit;
-                jump_target = target;
-            }
+        auto it = targets.lower_bound(pos + max_tokens - 64);
+        if (it != targets.end()) {
+            int target = *it;
+            jump_result = dp(target, max_tokens, 0, time + 1, targets, true, 0);
+            jump_result.profit *= 0.5;
+            jump_target = target;
         }
-        // 0.5 为惩罚项
-        jump_result.profit = jump_result.profit * 0.5;
+        else if (!targets.empty()) {
+            auto rit = targets.rbegin();
+            jump_result = dp(*rit, max_tokens, 0, time + 1, targets, true, 0);
+            jump_result.profit *= 0.5;
+            jump_target = *rit;
+        }
     }
     // 有需求
     int read_consume = 64;
@@ -342,6 +349,10 @@ DpResult Disk::dp(int pos, int token_remains, int contin_read_times, int time, c
     }
     else {
         if(token_remains >= 1) {
+            auto it = targets.lower_bound(pos); // 使用成员函数 lower_bound
+            if(it == targets.end() || *it - pos > token_remains) {
+                return {};
+            }
             pass_result = dp(pos + 1, token_remains - 1, 0, time, targets, has_jump, read_count);
             pass_result.actions = "p" + pass_result.actions;
         }
@@ -364,6 +375,7 @@ DpResult Disk::dp(int pos, int token_remains, int contin_read_times, int time, c
         current_result = jump_result;
         current_result.actions = "j " + std::to_string(pos);
     }
+    memo[key] = current_result;
     return current_result;
 }
 

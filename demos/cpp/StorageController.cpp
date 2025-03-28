@@ -126,8 +126,8 @@ void StorageController::get_busy_disks() {
             busy_disks.push_back(i);
         }
     }
-    std::set<int> busy_disks_set(busy_disks.begin(), busy_disks.end());
-    assert(busy_disks.size() == busy_disks_set.size());
+    // std::set<int> busy_disks_set(busy_disks.begin(), busy_disks.end());
+    // assert(busy_disks.size() == busy_disks_set.size());
 }
 
 void StorageController::delete_units_start_time() {
@@ -222,11 +222,6 @@ void StorageController::printf_actions(const int G) {
         obj_info[t].clear();
     }
     busy_disks.clear();
-    for(int i = 1; i < disks.size(); i ++) {
-        if(!plan.units_to_read[i].empty()) {
-            plan.units_to_read[i].clear();
-        }
-    }
 }
 
 void StorageController::tick(const int G, const int capacity) {
