@@ -29,7 +29,7 @@ public:
             disks.emplace_back(i, disk_cap, disk_units_num);
         }
         busy_disks.reserve(disk_num);
-        obj_info.resize(10);
+        obj_info.resize(disk_num);
     }
     
     // 处理删除请求

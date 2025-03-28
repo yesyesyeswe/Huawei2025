@@ -508,7 +508,6 @@ DpResult Disk::dp(int pos, int token_remains, int contin_read_times, int time, c
         }
     }
     
-
     double jump = jump_result.profit;
     double read = read_result.profit;
     double pass = pass_result.profit;
@@ -540,19 +539,19 @@ void Disk::dp_schedule_moves(set<int>& targets_set, unordered_map<int, vector<in
     int head = get_head();
 
     // bug: 要记录上次连续读取的时间
-    auto result = nr_dp(head, max_tokens, prev_continue_read, time, targets_set, false, 0);
+    auto result = dp(head, max_tokens, prev_continue_read, time, targets_set, false, 0);
 
     // 非跳跃
     if(!result.actions.empty() && !(result.actions[0] == 'j') || result.actions.empty()) {
         int new_head = head + result.actions.size();
         if(new_head > capacity) new_head %= capacity;
         set_head_position(new_head);
-        int continue_read_count = 0;
-        for (auto it = result.actions.rbegin(); it != result.actions.rend(); it ++) {
-            if(*it == 'r') continue_read_count ++;
-            else break;
-        }
-        prev_continue_read = continue_read_count;
+        // int continue_read_count = 0;
+        // for (auto it = result.actions.rbegin(); it != result.actions.rend(); it ++) {
+        //     if(*it == 'r') continue_read_count ++;
+        //     else break;
+        // }
+        // prev_continue_read = continue_read_count;
         result.actions += "#";
         units_read_id = result.read_units;
     }
@@ -569,7 +568,7 @@ void Disk::dp_schedule_moves(set<int>& targets_set, unordered_map<int, vector<in
         int obj_id = units[unit_id].object_id;
         int obj_block_id = units[unit_id].object_block;
         obj_info[obj_id].emplace_back(obj_block_id);
-        targets_set.erase(unit_id);
+        //targets_set.erase(unit_id);
     }
     
     assert(get_head() <= capacity && get_head() >= 1);

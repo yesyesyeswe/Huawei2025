@@ -135,8 +135,9 @@ void RequestScheduler::update_req(unordered_set<int>& req_set, vector<int>& obj_
         // 判断是否活跃
         if(req_it != active_requests.end()) {
             // 为已完成 request 更新状态
-            req_it -> second.completed_blocks.insert(obj_blocks.begin(), obj_blocks.end());
-            if(req_it -> second.is_completed()) {
+            auto &req = req_it -> second;
+            req.completed_blocks.insert(obj_blocks.begin(), obj_blocks.end());
+            if(req.is_completed()) {
                 complete_request.push_back(req_id);
                 it = req_set.erase(it);
             }
@@ -149,22 +150,22 @@ void RequestScheduler::update_req(unordered_set<int>& req_set, vector<int>& obj_
     }
 }
 
-void RequestScheduler::delete_complete_req(unordered_set<int>& reqs) {
-    auto it = reqs.begin();
-    while(it != reqs.end()) {
-        const int req_id = *it;
-        auto& req = active_requests[req_id];
-        // 清理
-        if(req.is_completed()) {
-            complete_request.push_back(req_id);
-            active_requests.erase(req_id);
-            it = reqs.erase(it);
-            n_rsp ++;
-            continue;
-        }
-        it ++;   
-    }
-}
+// void RequestScheduler::delete_complete_req(unordered_set<int>& reqs) {
+//     auto it = reqs.begin();
+//     while(it != reqs.end()) {
+//         const int req_id = *it;
+//         auto& req = active_requests[req_id];
+//         // 清理
+//         if(req.is_completed()) {
+//             complete_request.push_back(req_id);
+//             active_requests.erase(req_id);
+//             it = reqs.erase(it);
+//             n_rsp ++;
+//             continue;
+//         }
+//         it ++;   
+//     }
+// }
     
 void RequestScheduler::schedule_round(unordered_set<int>& new_req, unordered_map<int, StorageObject>& objects, const int current_time, const int G, const int capacity) {
     auto it = new_req.begin();
