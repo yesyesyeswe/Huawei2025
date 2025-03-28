@@ -498,11 +498,13 @@ DpResult Disk::dp(int pos, int token_remains, int contin_read_times, int time, c
             read_result.actions = "r" + read_result.actions;
         }
     }
-    if(token_remains >= 1) {
-        auto it = targets.lower_bound(pos); // 使用成员函数 lower_bound
-        if(it != targets.end() && *it - pos <= token_remains) {
-            pass_result = dp(pos + 1, token_remains - 1, 0, time, targets, has_jump, read_count);
-            pass_result.actions = "p" + pass_result.actions;
+    else { // 强行禁止不 read 而 pass
+        if(token_remains >= 1) {
+            auto it = targets.lower_bound(pos); // 使用成员函数 lower_bound
+            if(it != targets.end() && *it - pos <= token_remains) {
+                pass_result = dp(pos + 1, token_remains - 1, 0, time, targets, has_jump, read_count);
+                pass_result.actions = "p" + pass_result.actions;
+            }
         }
     }
     
@@ -545,6 +547,12 @@ void Disk::dp_schedule_moves(set<int>& targets_set, unordered_map<int, vector<in
         int new_head = head + result.actions.size();
         if(new_head > capacity) new_head %= capacity;
         set_head_position(new_head);
+        int continue_read_count = 0;
+        for (auto it = result.actions.rbegin(); it != result.actions.rend(); it ++) {
+            if(*it == 'r') continue_read_count ++;
+            else break;
+        }
+        prev_continue_read = continue_read_count;
         result.actions += "#";
         units_read_id = result.read_units;
     }
