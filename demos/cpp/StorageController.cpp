@@ -106,8 +106,6 @@ void StorageController::get_busy_disks() {
             busy_disks.push_back(i);
         }
     }
-    std::set<int> busy_disks_set(busy_disks.begin(), busy_disks.end());
-    assert(busy_disks.size() == busy_disks_set.size());
 }
 
 struct alignas(64) PaddedString {
