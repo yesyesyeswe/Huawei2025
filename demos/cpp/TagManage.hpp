@@ -10,27 +10,19 @@ using std::pair;
 
 /******************** 标签管理类 ********************/
 class TagManager {
-private:
-    int tag_num = 0;                                         // 总标签个数
-    unordered_map<int, set<int>> stage_hot_tags_read;        // 热门读取标签
-    unordered_map<int, set<int>> stage_cold_tags_read;       // 冷门读取标签
-    unordered_map<int, set<int>> stage_hot_tags_delete;      // 热门删除标签
-    unordered_map<int, set<int>> stage_cold_tags_delete;      // 冷门删除标签
-    
 public:
-
     // 预处理数据存储
     vector<vector<int>> fre_del;
     vector<vector<int>> fre_write;
     vector<vector<int>> fre_read;
 
-    int read_max_tags_choose;
-    int delete_max_tags_choose;
-    int read_slice;
-    int read_future_steps;
-    int delete_slice;
-    int delete_future_steps;
-    int period = 0;                                         // 流程个数
+    vector<int> tag_units_need;     // 每个 tag 需要的最大空间
+    vector<int> hot_read_tags;      // 热门读取标签
+    vector<int> cold_read_tags;     // 冷门读取标签
+    set<int> hot_read_tags_set;      // 热门读取标签
+    set<int> cold_read_tags_set;     // 冷门读取标签
+    int tag_num = 0;                // 总标签个数
+    int period = 0;                 // 流程个数
 
     TagManager(
         int M, 
@@ -41,48 +33,18 @@ public:
         fre_del.resize(tag_num + 1, std::vector<int>(period + 1, 0));
         fre_write.resize(tag_num + 1, std::vector<int>(period + 1, 0));
         fre_read.resize(tag_num + 1, std::vector<int>(period + 1, 0));
-        stage_hot_tags_read.reserve(period / 4);
-        stage_hot_tags_delete.reserve(period / 4);
+        hot_read_tags.reserve(tag_num / 2 + 1);
+        cold_read_tags.reserve(tag_num / 2 + 1);
+        tag_units_need.resize(tag_num + 1);
     }
 
     // 获取推荐磁盘
-    vector<int> select_disk(int stage, int tag, int obj_id, const vector<Disk>& disks);
-    // 处理读取数据
-    void selectHotTagsRead(int max_num, int slice, int future_steps) {
-        selectHotTagsGeneric(fre_read, stage_hot_tags_read, max_num, slice, future_steps, 0.236, stage_cold_tags_read);
-    }
-    // 处理删除数据
-    void selectHotTagsDelete(int max_num, int slice, int future_steps) {
-        selectHotTagsGeneric(fre_del, stage_hot_tags_delete, max_num, slice, future_steps, 0.674, stage_cold_tags_delete);
-    }
-    bool isHotReadTags(int stage, int tag) { 
-        return stage_hot_tags_read[stage].count(tag); 
-    }
-    bool isColdReadTags(int stage, int tag) { 
-        return stage_cold_tags_read[stage].count(tag); 
-    }
-    bool isHotDeleteTags(int stage, int tag) { 
-        return stage_hot_tags_delete[stage].count(tag); 
-    }
-    set<int> get_hot_tag(int stage) { return stage_hot_tags_read[stage]; }
+    vector<int> select_disk(int tag, int obj_id, const vector<Disk>& disks);
+    // 预处理信息
+    void process_flequency_info();
 
-private:
-    void selectHotTagsGeneric(
-        const vector<vector<int>>& data, 
-        unordered_map<int, set<int>>& result_store, 
-        int max_num, 
-        int slice, 
-        int future_steps,
-        double rate,
-        unordered_map<int, set<int>>& cold_result_store
-    );
-    void Get_all_tag_accsums(
-        const vector<vector<int>>& data,
-        vector<vector<int>>& all_tag_sums, 
-        int slice,
-        int future_steps,
-        double weight
-    ); 
-    
+    bool is_hot_readTags(int tag) { return hot_read_tags_set.count(tag); }
+    bool is_cold_readTags(int tag) { return cold_read_tags_set.count(tag); }
+
 };
 #endif

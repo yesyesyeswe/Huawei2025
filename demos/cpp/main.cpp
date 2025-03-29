@@ -57,21 +57,9 @@ int main()
 
     int T, M, N, V, G;
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
-    int read_max_tags_choose = 6;
-    int delete_max_tags_choose = 5;
-    int read_slice = 4;
-    int read_future_steps = 2;
-    int delete_slice = 12;
-    int delete_future_steps = 3;
 
     StorageController controller(N + 1, G, V, T, M, (T - 1) / FRE_PER_SLICING + 1);
     TagManager& Tag = controller.tag_manager;
-    Tag.read_max_tags_choose = read_max_tags_choose;
-    Tag.delete_max_tags_choose = delete_max_tags_choose;
-    Tag.read_slice = read_slice;
-    Tag.read_future_steps = read_future_steps;
-    Tag.delete_slice = delete_slice;
-    Tag.delete_future_steps = delete_future_steps;
 
      // 预处理数据加载
      auto load_fre = [M, T](vector<vector<int>>& dest) {
@@ -88,8 +76,10 @@ int main()
     load_fre(Tag.fre_write); 
     load_fre(Tag.fre_read);
 
-    Tag.selectHotTagsDelete(delete_max_tags_choose, delete_slice, delete_future_steps);
-    Tag.selectHotTagsRead(read_max_tags_choose, read_slice, read_future_steps);
+    // 预处理频率信息
+    Tag.process_flequency_info();
+    // 分区
+    controller.set_partition();
 
     printf("OK\n");
     fflush(stdout);
@@ -121,13 +111,12 @@ int main()
         scanf("%d", &n_write);
         vector<StorageObject> new_objs;
         if(n_write) new_objs.reserve(n_write);
-        int stage = (controller.current_time - 1) / (FRE_PER_SLICING * read_slice) + 1;
         for(int i = 0; i < n_write; i ++) {
             int id, size, tag;
             scanf("%d %d %d", &id, &size, &tag);
             new_objs.emplace_back(id, size, tag);
         }
-        if(n_write) controller.process_write_main(stage, new_objs);
+        if(n_write) controller.process_write_main(new_objs);
         fflush(stdout);
         
         // 处理读取请求
@@ -136,7 +125,7 @@ int main()
         for(int i = 0; i < n_read; i ++) {
             int req_id, obj_id;
             scanf("%d %d", &req_id, &obj_id);
-            controller.process_read(req_id, obj_id, (controller.current_time - 1) / (FRE_PER_SLICING * delete_slice) + 1);
+            controller.process_read(req_id, obj_id);
         }
         
         // 推进时间

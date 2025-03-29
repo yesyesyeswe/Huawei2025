@@ -1,17 +1,51 @@
 #include "StorageController.hpp"
 
+void StorageController::set_partition() {
+    auto hot = tag_manager.hot_read_tags;
+    auto cold = tag_manager.cold_read_tags;
+    const auto& tag_units_need = tag_manager.tag_units_need;
+    int total_units_need = std::accumulate(tag_units_need.begin(), tag_units_need.end(), 0);
+    int tag_half_num = hot.size();
+    int spare_units = static_cast<int>(0.95 * capacity) - 1;
+
+    int disk_num = disks.size();
+    for(int i = 1; i < disk_num; i ++) {
+        std::random_shuffle(hot.begin(), hot.end());
+        std::random_shuffle(cold.begin(), cold.end());
+        int begin = 1;
+        auto& disk = disks[i];
+        for(int j = 0; j < tag_half_num; j ++) {
+            int hot_tag_id = hot[j];
+            int hot_need = static_cast<int>(tag_units_need[hot_tag_id] * 1.0 / total_units_need * spare_units);
+            disk.add_partition(hot_tag_id, 2 * j + 1, begin, hot_need, false);
+            begin += hot_need;
+
+            int cold_tag_id = cold[j];
+            int cold_need = static_cast<int>(tag_units_need[cold_tag_id] * 1.0 / total_units_need * spare_units);
+            disk.add_partition(cold_tag_id, 2 * j + 2, begin, cold_need, true);
+            begin += cold_need;
+        }
+        if(begin <= spare_units) {
+            disk.reserve_blocks.emplace_front(begin, spare_units);
+            disk.reserve_free_size += spare_units - begin + 1;
+        }
+    }
+}
+
 void StorageController::process_delete(vector<int>& deleted_object_id) {
     int n_abort = 0;
     vector<int> abort_reqs;
-    vector<set<int>> units_to_release;
+    vector<unordered_map<int, set<int>>> units_to_release;
     units_to_release.resize(disks.size());
     for(int obj_id : deleted_object_id) {
         StorageObject& obj = objects[obj_id];
         vector<ObjectReplica>& replicas = obj.replicas;
+        int tag = obj.get_tag();
         // 磁盘清理
         for(auto& replica : replicas) {
-            for(int unit_id : replica.get_units()) {
-                units_to_release[replica.get_disk()].insert(unit_id); 
+            auto& units = replica.get_units();
+            for(int unit_id : units) {
+                units_to_release[replica.get_disk()][tag].insert(unit_id); 
             }
         }
         
@@ -40,30 +74,7 @@ void StorageController::process_delete(vector<int>& deleted_object_id) {
     }
 }
 
-void StorageController::process_write_main(int stage, vector<StorageObject>&new_objs) {
-    
-    if(prev_stage != stage && stage <= tag_manager.period) {
-        int disk_num = disks.size();
-        prev_stage = stage;
-        // 根据 stage 调整当前热区大小
-        int require = 0;
-        auto hot_read_tag_set = tag_manager.get_hot_tag(stage); 
-        // 记录即将频繁读取的物品写入的大小
-        auto& free_write = tag_manager.fre_write;
-        int rs = tag_manager.read_slice;
-        for(int tag_id : hot_read_tag_set) {
-            for(int i = 1; i <= rs; i ++) {
-                require += free_write[tag_id][(stage - 1) * rs + i];
-            }
-        }
-        // 物品总数 * 平均大小 * 副本个数 / 磁盘个数 
-        require = static_cast<int>((require * 2 * 3) / (disk_num - 1));
-
-        // 动态调整热区大小
-        for(int i = 1; i < disk_num; i ++) {
-            disks[i].adjust_hot_zone(require);
-        } 
-    }
+void StorageController::process_write_main(vector<StorageObject>&new_objs) {
     
     // 按对象大小降序排序
     std::sort(new_objs.begin(), new_objs.end(), [](const auto& a, const auto& b) {
@@ -72,18 +83,18 @@ void StorageController::process_write_main(int stage, vector<StorageObject>&new_
 
     // 按序处理写入
     for (auto& obj : new_objs) {
-        process_write(stage, obj);
+        process_write(obj);
     }
 }
 
-void StorageController::process_write(int stage, StorageObject& obj) {
+void StorageController::process_write(StorageObject& obj) {
     int tag = obj.get_tag();
     int obj_id = obj.get_obj_id();
     int size = obj.get_size();
     // 选择目标磁盘
     vector<int> selected_disks;
     while(selected_disks.size() < REP_NUM) {
-        selected_disks = tag_manager.select_disk(stage, tag, obj_id, disks);
+        selected_disks = tag_manager.select_disk(tag, obj_id, disks);
     }
     
     // 分配存储空间
@@ -92,12 +103,10 @@ void StorageController::process_write(int stage, StorageObject& obj) {
         int consecutive = 0;
         vector<int> units;
         bool success;
-        if(tag_manager.isHotReadTags(stage, tag))
-            success = disks[d].hot_allocate(size, obj_id, consecutive, units);
-        else if(tag_manager.isColdReadTags(stage, tag)) 
-            success = disks[d].cold_allocate(size, obj_id, consecutive, units);
+        if(tag_manager.is_hot_readTags(tag))
+            success = disks[d].hot_allocate(tag, size, obj_id, consecutive, units);
         else 
-            success = disks[d].normal_allocate(size, obj_id, consecutive, units);
+            success = disks[d].cold_allocate(tag, size, obj_id, consecutive, units);
         assert(success);
         printf("%d ", d);
         for(int i = 0; i < units.size(); i ++) {
@@ -163,7 +172,7 @@ void StorageController::printf_actions(const int G) {
     }
 
     //任务分片参数
-    const size_t num_threads = std::min(4UL, busy_disks.size());
+    const size_t num_threads = std::min(1UL, busy_disks.size());
     vector<std::thread> workers;
     // 动态计算分片参数
     const size_t total_disks = busy_disks.size();
