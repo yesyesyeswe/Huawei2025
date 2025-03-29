@@ -568,7 +568,8 @@ void Disk::dp_schedule_moves(set<int>& targets_set, unordered_map<int, vector<in
         int obj_id = units[unit_id].object_id;
         int obj_block_id = units[unit_id].object_block;
         obj_info[obj_id].emplace_back(obj_block_id);
-        //targets_set.erase(unit_id);
+        targets_set.erase(unit_id);
+        units[unit_id].start_time.clear();
     }
     
     assert(get_head() <= capacity && get_head() >= 1);

@@ -130,29 +130,29 @@ void StorageController::get_busy_disks() {
     // assert(busy_disks.size() == busy_disks_set.size());
 }
 
-void StorageController::delete_units_start_time() {
-    auto& complete_request = scheduler.complete_request;
-    auto& plan = scheduler.plan;
-    for(int req_id : complete_request) {
-        const auto& req = scheduler.active_requests[req_id];
-        const auto& obj = objects[req.object_id];
-        const auto& replica = obj.replicas;
-        int start_time = req.start_time;
-        for(int i = 0; i < REP_NUM; i ++) {
-            int disk_id = replica[i].get_disk();
-            const auto& units_id = replica[i].get_units();
-            auto& disk = disks[disk_id];
-            disk.erase_request(units_id, start_time);
-            for(int id : units_id) {
-                const auto& units = disk.units;
-                // 如果此时该 id 没有请求读取，则删除
-                if(units[id].start_time.empty()) {
-                    plan.units_to_read[disk_id].erase(id);
-                }
-            }
-        }
-    }
-}
+// void StorageController::delete_units_start_time() {
+//     auto& complete_request = scheduler.complete_request;
+//     auto& plan = scheduler.plan;
+//     for(int req_id : complete_request) {
+//         const auto& req = scheduler.active_requests[req_id];
+//         const auto& obj = objects[req.object_id];
+//         const auto& replica = obj.replicas;
+//         int start_time = req.start_time;
+//         for(int i = 0; i < REP_NUM; i ++) {
+//             int disk_id = replica[i].get_disk();
+//             const auto& units_id = replica[i].get_units();
+//             auto& disk = disks[disk_id];
+//             disk.erase_request(units_id, start_time);
+//             for(int id : units_id) {
+//                 const auto& units = disk.units;
+//                 // 如果此时该 id 没有请求读取，则删除
+//                 if(units[id].start_time.empty()) {
+//                     plan.units_to_read[disk_id].erase(id);
+//                 }
+//             }
+//         }
+//     }
+// }
 
 struct alignas(64) PaddedString {
     std::string data;
@@ -256,7 +256,7 @@ void StorageController::tick(const int G, const int capacity) {
         fflush(stdout);
 
         // 根据完成的请求删除 units 中的请求队列
-        delete_units_start_time();
+        //delete_units_start_time();
 
         // 打印完成请求
         scheduler.printf_completed_request(objects);
