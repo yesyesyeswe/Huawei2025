@@ -467,19 +467,42 @@ DpResult Disk::dp(int pos, int token_remains, int contin_read_times, int time, c
     DpResult current_result, read_result, jump_result, pass_result;
     int jump_target = 0;
     if(token_remains == max_tokens && !has_jump) {
+        DpResult forward, backward;
+        int f_target = 0, b_target = 0;
         auto it = targets.lower_bound(pos + max_tokens - 64);
         if (it != targets.end()) {
             int target = *it;
-            jump_result = dp(target, max_tokens, 0, time + 1, targets, true, 0);
-            jump_result.profit *= 0.5;
-            jump_target = target;
+            forward = dp(target, max_tokens, 0, time + 1, targets, true, 0);
+            forward.profit *= 0.5;
+            f_target = target;
         }
-        else if (!targets.empty()) {
-            auto rit = targets.begin();
-            jump_result = dp(*rit, max_tokens, 0, time + 1, targets, true, 0);
-            jump_result.profit *= 0.5;
-            jump_target = *rit;
+        auto back_it = targets.begin();
+        if(!targets.empty() && *back_it < pos) {
+            int target = *back_it;
+            backward = dp(target, max_tokens, 0, time + 1, targets, true, 0);
+            backward.profit *= 0.5;
+            b_target = target;   
         }
+        if(forward.profit >= backward.profit) {
+            jump_result = forward;
+            jump_target = f_target;
+        }
+        else {
+            jump_result = backward;
+            jump_target = b_target;
+        }
+        // if (it != targets.end()) {
+        //     int target = *it;
+        //     jump_result = dp(target, max_tokens, 0, time + 1, targets, true, 0);
+        //     jump_result.profit *= 0.5;
+        //     jump_target = target;
+        // }
+        // else if (!targets.empty()) {
+        //     auto rit = targets.begin();
+        //     jump_result = dp(*rit, max_tokens, 0, time + 1, targets, true, 0);
+        //     jump_result.profit *= 0.5;
+        //     jump_target = *rit;
+        // }
     }
     // 有需求
     int read_consume = 64;
