@@ -56,8 +56,8 @@ void StorageController::process_write_main(int stage, vector<StorageObject>&new_
                 require += free_write[tag_id][(stage - 1) * rs + i];
             }
         }
-        // 物品总数 * 平均大小 * 副本个数 / 磁盘个数 * 备用容量(1.2)
-        require = static_cast<int>((require * 2.5 * 3) / (disk_num - 1) * 1.2);
+        // 物品总数 * 平均大小 * 副本个数 / 磁盘个数 
+        require = static_cast<int>((require * 2 * 3) / (disk_num - 1));
 
         // 动态调整热区大小
         for(int i = 1; i < disk_num; i ++) {
@@ -94,6 +94,8 @@ void StorageController::process_write(int stage, StorageObject& obj) {
         bool success;
         if(tag_manager.isHotReadTags(stage, tag))
             success = disks[d].hot_allocate(size, obj_id, consecutive, units);
+        else if(tag_manager.isColdReadTags(stage, tag)) 
+            success = disks[d].cold_allocate(size, obj_id, consecutive, units);
         else 
             success = disks[d].normal_allocate(size, obj_id, consecutive, units);
         assert(success);
@@ -179,6 +181,7 @@ void StorageController::printf_actions(const int G) {
                 if (!plan.units_to_read[disk_id].empty()) {
                     std::string actions;
                     actions.reserve(G + 1);
+                    disks[disk_id].current_time = current_time;
                     disks[disk_id].schedule_moves(plan.units_to_read[disk_id], obj_info[local_t], actions);
                     disk_actions[disk_id].data = actions;
                     plan.disk_head_pos[disk_id] = disks[disk_id].get_head();

@@ -11,9 +11,11 @@ using std::pair;
 /******************** 标签管理类 ********************/
 class TagManager {
 private:
-    int tag_num = 0;                                        // 总标签个数
-    unordered_map<int, set<int>> stage_hot_tags_read;       // 热门读取标签
-    unordered_map<int, set<int>> stage_hot_tags_delete;     // 热门删除标签
+    int tag_num = 0;                                         // 总标签个数
+    unordered_map<int, set<int>> stage_hot_tags_read;        // 热门读取标签
+    unordered_map<int, set<int>> stage_cold_tags_read;       // 冷门读取标签
+    unordered_map<int, set<int>> stage_hot_tags_delete;      // 热门删除标签
+    unordered_map<int, set<int>> stage_cold_tags_delete;      // 冷门删除标签
     
 public:
 
@@ -47,14 +49,17 @@ public:
     vector<int> select_disk(int stage, int tag, int obj_id, const vector<Disk>& disks);
     // 处理读取数据
     void selectHotTagsRead(int max_num, int slice, int future_steps) {
-        selectHotTagsGeneric(fre_read, stage_hot_tags_read, max_num, slice, future_steps, 0.236);
+        selectHotTagsGeneric(fre_read, stage_hot_tags_read, max_num, slice, future_steps, 0.236, stage_cold_tags_read);
     }
     // 处理删除数据
     void selectHotTagsDelete(int max_num, int slice, int future_steps) {
-        selectHotTagsGeneric(fre_del, stage_hot_tags_delete, max_num, slice, future_steps, 0.674);
+        selectHotTagsGeneric(fre_del, stage_hot_tags_delete, max_num, slice, future_steps, 0.674, stage_cold_tags_delete);
     }
     bool isHotReadTags(int stage, int tag) { 
         return stage_hot_tags_read[stage].count(tag); 
+    }
+    bool isColdReadTags(int stage, int tag) { 
+        return stage_cold_tags_read[stage].count(tag); 
     }
     bool isHotDeleteTags(int stage, int tag) { 
         return stage_hot_tags_delete[stage].count(tag); 
@@ -68,7 +73,8 @@ private:
         int max_num, 
         int slice, 
         int future_steps,
-        double rate
+        double rate,
+        unordered_map<int, set<int>>& cold_result_store
     );
     void Get_all_tag_accsums(
         const vector<vector<int>>& data,

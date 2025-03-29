@@ -50,6 +50,12 @@ public:
             tag_manager.isHotDeleteTags(stage, objects[obj_id].get_tag())
         );
         objects[obj_id].add_request(req_id);
+        for(int i = 0; i < REP_NUM; i ++) {
+            const auto& replica = objects[obj_id].replicas[i];
+            int disk_id = replica.get_disk();
+            const auto& units_id = replica.get_units();
+            disks[disk_id].set_units_time(units_id, current_time);
+        }
     }
     // 获取繁忙磁盘
     void get_busy_disks();

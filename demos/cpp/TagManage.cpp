@@ -74,7 +74,8 @@ void TagManager::selectHotTagsGeneric(
     int max_num,
     int slice,
     int future_steps,
-    double rate
+    double rate,
+    unordered_map<int, set<int>>& cold_result_store
 ) {
     int small_stages = period / slice + 1;
     vector<vector<int>> all_tag_sums;
@@ -97,12 +98,19 @@ void TagManager::selectHotTagsGeneric(
 
         // --- 选择最多max_num个标签 ---
         set<int> hot_tags;
+        set<int> cold_tags;
         int count = 0;
         for (const auto& [sum, idx] : candidates) {
             if (count >= max_num) break;
             hot_tags.insert(idx);
             count ++;
         }
-        result_store[stage].swap(hot_tags);
+        count = 0;
+        for(auto it = candidates.rbegin(); it != candidates.rend(); it ++) {
+            if (count >= max_num) break;
+            cold_tags.insert(it -> second);
+            count ++;
+        }
+        cold_result_store[stage].swap(cold_tags);
     }
 }

@@ -180,6 +180,73 @@ void Disk::set_obj_to_unit(int size, int obj_id, vector<int>& allocated_units) {
     }
 }
 
+bool Disk::cold_allocate_Generic(int size, int obj_id, int& consecutive, vector<int>& allocated_units, list<Block>& blocks) {
+    // 先尝试分配连续空间
+    for (auto it = blocks.rbegin(); it != blocks.rend(); it ++) {
+        int start = it -> start;
+        int end = it -> end;
+        int block_size = end - start + 1;
+        if (block_size >= size) {
+            allocated_units.clear();
+            allocated_units.resize(size);
+            std::iota(allocated_units.begin(), allocated_units.end(), end - size + 1);
+            it -> end = it -> end - size;
+            if ((it -> end) < start) {
+                blocks.erase(std::next(it).base());
+            }
+            set_obj_to_unit(size, obj_id, allocated_units);
+            return true;
+        }
+    }
+
+    std::vector<int> discrete_units;
+    discrete_units.reserve(size);
+
+    // 遍历所有块，收集离散单元
+    // 使用迭代器遍历，记录处理位置
+    auto it = blocks.rbegin();
+    while (it != blocks.rend() && discrete_units.size() < size) {
+        Block& block = *it;
+        int start = block.start;
+        int end   = block.end;
+        int available = end - start + 1;
+        if (available <= 0) { // 防御性编程：处理无效块
+            assert(0);
+            continue;
+        }
+        int take = min(available, size - (int)discrete_units.size());
+
+        // 收集离散单元：插入 end - take + 1 到 end 的连续值
+        for (int i = 0; i < take; i ++) {
+            discrete_units.push_back(end - i);
+        }
+
+        // 更新当前块
+        if (take == available) {
+            // 整个块被分配完，删除当前块
+            it = decltype(it)(blocks.erase(std::next(it).base()));
+        } else {
+            // 切割出剩余块，替换当前块
+            Block remaining(start, end - take);
+            *it = remaining;  // 直接修改原块
+            it ++;
+        }
+    }
+
+    // 检查是否分配成功
+    if (discrete_units.size() < size) {
+        assert(0);
+        return false;
+    }
+
+    // 为了保证顺序
+    std::reverse(discrete_units.begin(), discrete_units.end());
+    allocated_units = std::move(discrete_units);
+    set_obj_to_unit(size, obj_id, allocated_units);
+    return true; 
+}
+
+
 bool Disk::allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units, list<Block>& blocks) {
     // 先尝试分配连续空间
     for (auto it = blocks.begin(); it != blocks.end(); it ++) {
@@ -360,7 +427,7 @@ bool Disk::smart_move(int dest, string& actions) {
     if(reverse_steps < direct_steps || direct_steps > max_tokens - 64) {
         if(can_perform(max_tokens)) { 
             // 如果热区需要读取的很多，则跳跃
-            if(hot_req_unit_size >= hot_capacity * 0.5) {
+            if(hot_req_unit_size >= hot_capacity * 0.8) {
                 for(const auto& block : hot_zone_blocks) {
                     if(block.end - block.start + 1 > 5) {
                         actions = "j " + std::to_string(block.start);
@@ -402,12 +469,12 @@ bool Disk::perform_read(int dest, string& actions, int read_consume) {
     return false;
 }
 
-bool Disk::get_actions(vector<int>& obj_index, string& actions) {
+bool Disk::get_actions(vector<int>& targets, string& actions) {
     units_read_id.clear(); // 清空成员变量
-    actions.reserve(actions.size() + obj_index.size() * 2);
+    actions.reserve(actions.size() + targets.size() * 2);
 
     int current = get_head();
-    for (int dest : obj_index) {
+    for (int dest : targets) {
         if(current_time - units[dest].newest_time >= 105) {
             pass_away_units.push_back(dest);
             continue;
@@ -477,14 +544,14 @@ void Disk::schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>
     loop_requests(targets_set, targets);
     
     // 使用 SCAN 算法规划路径
-    bool isdone = targets.empty() || get_actions(targets, actions);
+    bool isdone = get_actions(targets, actions);
     if (!isdone) actions += '#';
 
     for(int unit_id : units_read_id) {
         int obj_id = units[unit_id].object_id;
         int obj_block_id = units[unit_id].object_block;
         obj_info[obj_id].emplace_back(obj_block_id);
-        targets_set.erase(unit_id);
+        if(!is_hot_unit[unit_id]) targets_set.erase(unit_id);
         if(is_hot_unit[unit_id]) hot_req_unit_size --;
     }
     for(int unit_id : pass_away_units) {

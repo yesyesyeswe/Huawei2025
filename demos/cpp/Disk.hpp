@@ -90,13 +90,12 @@ public:
         free_size(V), 
         hot_req_unit_size(0),
         min_hot_capacity(static_cast<int>(V * 0.1)), 
-        max_hot_capacity(static_cast<int>(V * 0.4))  
+        max_hot_capacity(static_cast<int>(V * 0.3))  
         {
             is_hot_unit.resize(V + 1);
             fill(is_hot_unit.begin(), is_hot_unit.end(), false);
-            int hot_start = static_cast<int>(V * 0.1);
-            int hot_end = static_cast<int>(V * 0.41);
-            // [hot_start, hot_end] 标记为 true
+            int hot_start = static_cast<int>(V * 0.43);
+            int hot_end = static_cast<int>(V * 0.57);
             fill(is_hot_unit.begin() + hot_start, is_hot_unit.begin() + hot_end + 1, true);
             hot_capacity = hot_end - hot_start + 1;
             hot_free_size = hot_capacity;
@@ -151,6 +150,21 @@ public:
         assert(0);
         return true;
     }
+
+    // 冷门分配
+    bool cold_allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units) {
+        if(free_size >= size && cold_allocate_Generic(size, obj_id, consecutive, allocated_units, free_blocks)){
+            free_size -= size;
+            return true;
+        }
+        if(hot_free_size >= size && cold_allocate_Generic(size, obj_id, consecutive, allocated_units, hot_zone_blocks)) {
+            hot_free_size -= size;
+            return true;
+        }
+        assert(0);
+        return false;
+    }
+
     // 普通分配
     bool normal_allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units) {
         if(free_size >= size && allocate(size, obj_id, consecutive, allocated_units, free_blocks)){
@@ -249,6 +263,8 @@ public:
     //bool inHotZone(int unit_id) const { return is_hot_unit[unit_id]; }
 
 private:
+    // 冷门分配
+    bool cold_allocate_Generic(int size, int obj_id, int& consecutive, vector<int>& allocated_units, list<Block>& blocks);
     // 分配指定大小的存储空间（优先连续）
     bool allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units, list<Block>& blocks);
     void deallocate(const set<int>& units, list<Block>& blocks);
