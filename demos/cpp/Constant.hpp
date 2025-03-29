@@ -9,4 +9,5 @@
 #define FRE_PER_SLICING (1800)
 #define EXTRA_TIME (105)
 
+const int require_token[8] = {64, 52, 42, 34, 28, 23, 19, 16};
 #endif

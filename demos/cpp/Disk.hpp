@@ -15,6 +15,9 @@
 #include <numeric>
 #include <list>
 #include <thread>
+#include <map>
+#include <stack>
+#include <tuple>
 using std::vector;
 using std::queue;
 using std::deque;
@@ -26,9 +29,12 @@ using std::unordered_set;
 using std::ceil;
 using std::list;
 using std::min;
+using std::max;
+using std::stack;
 
 #define READ 999
 #define MOVE 998
+
 
 class DiskUnit {
     public:
@@ -36,15 +42,18 @@ class DiskUnit {
         bool is_used;       // 是否使用
         int object_id;      // 该处存放物品
         int object_block;   // 该处存放的物品块号
+        int obj_size;       // 存储的物品大小
+        set<int> start_time;     // 加入的时间（多请求）
         
-        DiskUnit(int id) : unit_id(id), is_used(false), object_id(-1), object_block(-1) {}
+        DiskUnit(int id) : unit_id(id), is_used(false), object_id(-1), object_block(-1), obj_size(-1) {}
         void reset() {
             is_used = false;
             object_id = -1;
             object_block = -1;
+            obj_size = -1;
+            start_time.clear();
         }
 };
-
 struct Block {
     int start;  // 起始单元号
     int end;     // 结束单元号（闭区间）
@@ -52,6 +61,11 @@ struct Block {
     Block(int s, int e) : start(s), end(e) {}
 };
 
+struct DpResult {
+    double profit = 0;
+    string actions;
+    vector<int> read_units;
+};
 
 class Disk {
 private:
@@ -66,7 +80,21 @@ private:
     int free_size;              // 空闲容量
     int hot_free_size;          // 热门区空闲容量
     vector<int> units_read_id;  // 本次读取的单元
-    
+    struct DpKey {
+        int pos;
+        int token_remains;
+        int contin_read_times;
+        int time;
+        bool has_jump;
+        int read_count;
+
+        bool operator<(const DpKey& other) const {
+            return std::tie(pos, token_remains, contin_read_times, time, has_jump, read_count) <
+                   std::tie(other.pos, other.token_remains, other.contin_read_times, 
+                            other.time, other.has_jump, other.read_count);
+        }
+    };
+
 public:
     vector<bool> is_hot_unit;       // 单元是否属于热区
     const int min_hot_capacity;
@@ -74,6 +102,8 @@ public:
     list<Block> free_blocks;        // 空闲磁盘块
     list<Block> hot_zone_blocks;    // 热门读取区
     vector<DiskUnit> units;         // 磁盘单元
+    int prev_continue_read = 0; // 上次连续读取次数
+    std::map<DpKey, DpResult> memo;
     
     Disk(int id, int G, int V) : 
         disk_id(id), 
@@ -128,6 +158,10 @@ public:
     void update_is_hot_unit(int start, int end, bool flag) {
         fill(is_hot_unit.begin() + start, is_hot_unit.begin() + end + 1, flag);
     }
+
+    // 添加/删除请求
+    void add_request(const vector<int>& units_id, int _start_time);
+    void erase_request(const vector<int>& units_id, int _start_time);
 
 
     // 热门空间分配
@@ -201,6 +235,12 @@ public:
 
     void merge_adjacent_blocks(list<Block>& blocks);
     void set_obj_to_unit(int size, int obj_id, vector<int>& allocated_units);
+
+    // 动态规划获取路径
+    DpResult dp(int pos, int token_remains, int contin_read_times, int time, const set<int>& targets, bool has_jump, int read_count);
+    DpResult nr_dp(int pos, int token_remains, int contin_read_times, int time, const set<int>& targets, bool has_jump, int read_count);
+    void dp_schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions, int time);
+
 
     // 将需求按环状顺序整理
     void loop_requests(const set<int>& targets_set, vector<int>& targets);

@@ -131,7 +131,7 @@ int main()
         fflush(stdout);
         
         // 处理读取请求
-        int n_read;
+        int n_read ;
         scanf("%d", &n_read);
         for(int i = 0; i < n_read; i ++) {
             int req_id, obj_id;

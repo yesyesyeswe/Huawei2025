@@ -109,6 +109,23 @@ void StorageController::process_write(int stage, StorageObject& obj) {
     objects[obj_id] = obj;
 }
 
+void StorageController::process_read(int req_id, int obj_id, int stage)  {
+    scheduler.add_request(
+        req_id, 
+        obj_id, 
+        current_time, 
+        objects[obj_id].get_size(), 
+        tag_manager.isHotDeleteTags(stage, objects[obj_id].get_tag())
+    );
+    objects[obj_id].add_request(req_id);
+    for(int i = 0; i < REP_NUM; i ++) {
+        const auto& replica = objects[obj_id].replicas[i];
+        int disk_id = replica.get_disk();
+        const auto& units_id = replica.get_units();
+        disks[disk_id].add_request(units_id, current_time);
+    }
+}
+
 template<typename... Maps>
 std::unordered_map<int, std::vector<int>> merge_maps_efficient(const Maps&... maps) {
     std::unordered_map<int, std::vector<int>> result;
@@ -181,7 +198,7 @@ void StorageController::printf_actions(const int G) {
                 if (!plan.units_to_read[disk_id].empty()) {
                     std::string actions;
                     actions.reserve(G + 1);
-                    disks[disk_id].schedule_moves(plan.units_to_read[disk_id], obj_info[local_t], actions);
+                    disks[disk_id].dp_schedule_moves(plan.units_to_read[disk_id], obj_info[local_t], actions, current_time);
                     disk_actions[disk_id].data = actions;
                     plan.disk_head_pos[disk_id] = disks[disk_id].get_head();
                 } else {
