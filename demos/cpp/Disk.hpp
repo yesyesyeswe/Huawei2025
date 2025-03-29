@@ -36,8 +36,9 @@ class DiskUnit {
         bool is_used;       // 是否使用
         int object_id;      // 该处存放物品
         int object_block;   // 该处存放的物品块号
+        int newest_time;    // 最新请求的时间
         
-        DiskUnit(int id) : unit_id(id), is_used(false), object_id(-1), object_block(-1) {}
+        DiskUnit(int id) : unit_id(id), is_used(false), object_id(-1), object_block(-1), newest_time(0) {}
         void reset() {
             is_used = false;
             object_id = -1;
@@ -65,6 +66,7 @@ private:
     int hot_capacity;           // 热门区容量
     int free_size;              // 空闲容量
     int hot_free_size;          // 热门区空闲容量
+    int hot_req_unit_size;      // 热门空间待读取单元数量
     vector<int> units_read_id;  // 本次读取的单元
     
 public:
@@ -74,6 +76,8 @@ public:
     list<Block> free_blocks;        // 空闲磁盘块
     list<Block> hot_zone_blocks;    // 热门读取区
     vector<DiskUnit> units;         // 磁盘单元
+    vector<int> pass_away_units;    // 过时单元
+    int current_time;               // 当前时间
     
     Disk(int id, int G, int V) : 
         disk_id(id), 
@@ -84,13 +88,14 @@ public:
         max_tokens(G), 
         prev_consum(-1), 
         free_size(V), 
+        hot_req_unit_size(0),
         min_hot_capacity(static_cast<int>(V * 0.1)), 
-        max_hot_capacity(static_cast<int>(V * 0.6))  
+        max_hot_capacity(static_cast<int>(V * 0.4))  
         {
             is_hot_unit.resize(V + 1);
             fill(is_hot_unit.begin(), is_hot_unit.end(), false);
-            int hot_start = static_cast<int>(V * 0.3);
-            int hot_end = static_cast<int>(V * 0.6);
+            int hot_start = static_cast<int>(V * 0.1);
+            int hot_end = static_cast<int>(V * 0.41);
             // [hot_start, hot_end] 标记为 true
             fill(is_hot_unit.begin() + hot_start, is_hot_unit.begin() + hot_end + 1, true);
             hot_capacity = hot_end - hot_start + 1;
@@ -100,6 +105,7 @@ public:
             hot_zone_blocks.emplace_back(hot_start, hot_end);
             free_blocks.emplace_back(1, hot_start - 1);
             free_blocks.emplace_back(hot_end + 1, V);
+            pass_away_units.reserve(100);
 
             for(int i = 0; i <= V; i ++) {
                 units.emplace_back(i);
@@ -206,7 +212,7 @@ public:
     void loop_requests(const set<int>& targets_set, vector<int>& targets);
 
     // 磁头移动调度
-    void schedule_moves(const set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions);
+    void schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions);
     bool move_to_read(int dest, string& actions); 
     bool get_actions(vector<int>& obj_index, string& actions);
     bool smart_move(int dest, string& actions);
@@ -223,6 +229,7 @@ public:
     void set_prev_action(const int action) { prev_action = action; };
     // 更新上一次消耗的令牌数
     void set_prev_consum(const int consum) { prev_consum = consum; }
+    void set_units_time(const vector<int>& id, int time);
 
 
     // 更新令牌状态

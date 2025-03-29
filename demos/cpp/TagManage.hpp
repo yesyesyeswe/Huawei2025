@@ -47,11 +47,11 @@ public:
     vector<int> select_disk(int stage, int tag, int obj_id, const vector<Disk>& disks);
     // 处理读取数据
     void selectHotTagsRead(int max_num, int slice, int future_steps) {
-        selectHotTagsGeneric(fre_read, stage_hot_tags_read, max_num, slice, future_steps, 0.8);
+        selectHotTagsGeneric(fre_read, stage_hot_tags_read, max_num, slice, future_steps, 0.236);
     }
     // 处理删除数据
     void selectHotTagsDelete(int max_num, int slice, int future_steps) {
-        selectHotTagsGeneric(fre_del, stage_hot_tags_delete, max_num, slice, future_steps, 0.8);
+        selectHotTagsGeneric(fre_del, stage_hot_tags_delete, max_num, slice, future_steps, 0.674);
     }
     bool isHotReadTags(int stage, int tag) { 
         return stage_hot_tags_read[stage].count(tag); 

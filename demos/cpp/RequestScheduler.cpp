@@ -14,21 +14,21 @@ size_t RequestScheduler::calculate_dynamic_max(size_t disk_num) {
 
     // 根据用时进一步调整
     if (avg_latency < last_time_cost) {
-        dynamic_max = static_cast<size_t>(std::max(dynamic_max * 1.2, base * 1.0));
+        dynamic_max = static_cast<size_t>(std::max(dynamic_max * 1.98, base * 1.0));
     } 
     else if(avg_latency > last_time_cost) {
-        dynamic_max = std::min(static_cast<size_t>(dynamic_max / 1.5), base);
+        dynamic_max = std::min(static_cast<size_t>(dynamic_max * 0.15), base);
     }
     // 待处理请求太多了，多处理一点
     // 并且只有高优先级处理完了，才扩容低优先级的
     if(High_pq.size() >= 105) {
-        dynamic_max = static_cast<size_t>(std::min(dynamic_max * 1.2, base * 1.0));
+        dynamic_max = static_cast<size_t>(std::min(dynamic_max * 1.47, base * 1.0));
     }
     else if(Median_pq.size() >= 105) {
-        dynamic_max = static_cast<size_t>(std::min(dynamic_max * 1.1, base * 1.0));
+        dynamic_max = static_cast<size_t>(std::min(dynamic_max * 1.54, base * 1.0));
     }
     else if(Low_pq.size() >= 105) {
-        dynamic_max = static_cast<size_t>(std::min(dynamic_max * 1.05, base * 1.0));
+        dynamic_max = static_cast<size_t>(std::min(dynamic_max * 1.222, base * 1.0));
     }
     return dynamic_max;
 }
