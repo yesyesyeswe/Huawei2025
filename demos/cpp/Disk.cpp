@@ -757,9 +757,9 @@ void Disk::schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>
         int obj_id = units[unit_id].object_id;
         int obj_block_id = units[unit_id].object_block;
         obj_info[obj_id].emplace_back(obj_block_id);
-        if(!is_hot_unit[unit_id]) {
-            targets_set.erase(unit_id);
-        }
+        // if(!is_hot_unit[unit_id]) {
+        //     targets_set.erase(unit_id);
+        // }
     }
     
     assert(get_current_tokens() <= max_tokens);

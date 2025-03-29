@@ -198,7 +198,7 @@ void StorageController::printf_actions(const int G) {
                 if (!plan.units_to_read[disk_id].empty()) {
                     std::string actions;
                     actions.reserve(G + 1);
-                    disks[disk_id].dp_schedule_moves(plan.units_to_read[disk_id], obj_info[local_t], actions, current_time);
+                    disks[disk_id].schedule_moves(plan.units_to_read[disk_id], obj_info[local_t], actions);
                     disk_actions[disk_id].data = actions;
                     plan.disk_head_pos[disk_id] = disks[disk_id].get_head();
                 } else {
