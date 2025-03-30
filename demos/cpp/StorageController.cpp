@@ -6,7 +6,7 @@ void StorageController::set_partition() {
     const auto& tag_units_need = tag_manager.tag_units_need;
     int total_units_need = std::accumulate(tag_units_need.begin(), tag_units_need.end(), 0);
     int tag_half_num = hot.size();
-    int spare_units = static_cast<int>(0.95 * capacity) - 1;
+    int spare_units = static_cast<int>(0.9 * capacity) - 1;
 
     int disk_num = disks.size();
     for(int i = 1; i < disk_num; i ++) {
@@ -172,7 +172,7 @@ void StorageController::printf_actions(const int G) {
     }
 
     //任务分片参数
-    const size_t num_threads = std::min(1UL, busy_disks.size());
+    const size_t num_threads = std::min(4UL, busy_disks.size());
     vector<std::thread> workers;
     // 动态计算分片参数
     const size_t total_disks = busy_disks.size();

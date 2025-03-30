@@ -15,7 +15,19 @@ vector<int> TagManager::select_disk(int tag, int obj_id, const vector<Disk>& dis
             assert(0);
         }
         int part_id = it->second; // 获取值
-        disk_status.emplace_back(disk.Partitions[part_id].free_size, i);
+        int free_size = disk.Partitions[part_id].free_size;
+        if(free_size > 0) disk_status.emplace_back(free_size, i);
+    }
+    if(disk_status.size() < 3) disk_status.clear();
+    for(int i = 1; i < disks_num; i ++) {
+        auto& disk = disks[i];
+        auto it = disk.tag_to_part.find(tag); // 使用find
+        if (it == disk.tag_to_part.end()) {
+            assert(0);
+        }
+        int part_id = it->second; // 获取值
+        int free_size = disk.get_free();
+        if(free_size > 0) disk_status.emplace_back(free_size, i);
     }
     sort(disk_status.rbegin(), disk_status.rend());
     for (int i = 0; i < 3; ++i) {

@@ -99,6 +99,8 @@ public:
     vector<Partition> Partitions;     // 分区
     std::map<int, int> tag_to_part;   // tag 到分区的映射
     vector<int> on_heat_unit_num;     // 每个分区带读取单元
+    vector<int> part_req_unit_size;  // 每个 part 的 req 请求数量
+    const int part_num = 16;         // 分为 16 个 tag, 17 part    
     
     Disk(int id, int G, int V, int tag_num) : 
         disk_id(id), capacity(V), 
@@ -110,7 +112,7 @@ public:
             units.emplace_back(i);
         }
 
-        int begin = static_cast<int>(0.95 * V);
+        int begin = static_cast<int>(0.9 * V);
         reserve_free_size = V - begin + 1;
         reserve_blocks.emplace_back(begin, V);
 
@@ -120,6 +122,11 @@ public:
 
         on_heat_unit_num = vector<int>(tag_num + 1, 0);
         pass_away_units.reserve(100);
+
+        // 每一个 part 大小为 capacity / part_num
+        part_req_unit_size.resize(part_num + 1);
+        std::fill(part_req_unit_size.begin(), part_req_unit_size.end(), 0);
+
     }
 
     // 添加新分区
@@ -135,8 +142,9 @@ public:
     void adjust_hot_zone(int new_hot_demand);
     list<Block> borrow_from_normal_zone(int need);
     void release_to_normal_zone(int release_size);
-    void assert_enough_size(const list<Block>& blocks, int size) {
+    void assert_enough_size(const list<Block>& blocks, int size, int capacity) {
         int count = 0;
+        assert(size <= capacity && "free_size is more than capacity !");
         for (const auto& block : blocks) {
             count += block.end - block.start + 1;
         }
@@ -150,49 +158,12 @@ public:
 
 
     // 热门空间分配（正向分配）
-    bool hot_allocate(int tag, int size, int obj_id, int& consecutive, vector<int>& allocated_units) {
-        int part_id = tag_to_part[tag];
-        auto& part = Partitions[part_id];
-        if(part.free_size >= size && allocate(tag, size, obj_id, consecutive, allocated_units, part.partition_blocks)) {
-            part.free_size -= size;
-            //assert_enough_size();
-            return true;
-        }
-        if(reserve_free_size >= size && allocate(tag, size, obj_id, consecutive, allocated_units, reserve_blocks)){
-            reserve_free_size -= size;
-            //assert_enough_size();
-            return true;
-        }
-        assert(0);
-        return true;
-    }
+    bool hot_allocate(int tag, int size, int obj_id, int& consecutive, vector<int>& allocated_units);
 
     // 冷门分配（倒向分配）
-    bool cold_allocate(int tag, int size, int obj_id, int& consecutive, vector<int>& allocated_units) {
-        int part_id = tag_to_part[tag];
-        auto& part = Partitions[part_id];
-        if(part.free_size >= size && cold_allocate_Generic(tag, size, obj_id, consecutive, allocated_units, part.partition_blocks)) {
-            part.free_size -= size;
-            //assert_enough_size();
-            return true;
-        }
-        if(reserve_free_size >= size && cold_allocate_Generic(tag, size, obj_id, consecutive, allocated_units, reserve_blocks)){
-            reserve_free_size -= size;
-            //assert_enough_size();
-            return true;
-        }
-        assert(0);
-        return false;
-    }
+    bool cold_allocate(int tag, int size, int obj_id, int& consecutive, vector<int>& allocated_units);
 
-    void deallocate_main(unordered_map<int, set<int>>& units_id) {
-        for(auto& [tag, units_id_part] : units_id) {
-            int part_id = tag_to_part[tag];
-            auto& part = Partitions[part_id];
-            deallocate(units_id_part, part.partition_blocks);
-            part.free_size += units.size();
-        }
-    }
+    void deallocate_main(unordered_map<int, set<int>>& units_id);
 
     void merge_adjacent_blocks(list<Block>& blocks);
     void set_obj_to_unit(int tag, int size, int obj_id, vector<int>& allocated_units);
@@ -247,6 +218,40 @@ private:
     // 分配指定大小的存储空间（优先连续）
     bool allocate(int tag, int size, int obj_id, int& consecutive, vector<int>& allocated_units, list<Block>& blocks);
     void deallocate(const set<int>& units, list<Block>& blocks);
+
+    private:
+    // 新增：热度评分参数
+    const double SPATIAL_BONUS = 0.3;      // 连续区块奖励系数
+
+    // 计算单个单元的热度得分
+    double calculate_unit_score(int unit_id) const {
+        const DiskUnit& unit = units[unit_id];
+        // 时间衰减：最近访问时间越近得分越高
+        int time_gap = current_time - unit.newest_time;
+        double time_decay;
+        if(time_gap <= 10) time_decay = 1 - 0.005 * time_gap;
+        else if(time_gap < 105) time_decay = 1.05 - 0.01 * time_gap;
+        else time_decay = 0;
+        // 空间奖励：连续区块加分
+        int block_size = 1; // 默认单块
+        int obj_id = unit.object_id;
+        while(units[unit_id + block_size].object_id == obj_id) {
+            block_size ++;
+        }
+        double spatial_bonus = 1.0 + SPATIAL_BONUS * log(block_size + 1);
+        return time_decay * spatial_bonus;
+    }
+
+    // 计算分区的综合热度
+    double get_partition_score(int part_id) const {
+        int start = (part_id - 1) * (capacity / part_num) + 1;
+        int end = part_id * (capacity / part_num);
+        double score = 0.0;
+        for (int unit = start; unit <= end; ++unit) {
+            score += calculate_unit_score(unit);
+        }
+        return score / (end - start + 1); // 平均得分
+    }
 
 };
 #endif

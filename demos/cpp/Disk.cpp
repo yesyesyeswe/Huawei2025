@@ -42,6 +42,7 @@ void Disk::set_obj_to_unit(int tag, int size, int obj_id, vector<int>& allocated
         units[allocated_units[i]].object_block = i + 1;
         units[allocated_units[i]].part_id = part_id;
         units[allocated_units[i]].is_used = true;
+        part_req_unit_size[part_id] ++;
         on_heat_unit_num[part_id] ++;
         
     }
@@ -85,6 +86,7 @@ bool Disk::cold_allocate_Generic(int tag, int size, int obj_id, int& consecutive
 
         // 收集离散单元：插入 end - take + 1 到 end 的连续值
         for (int i = 0; i < take; i ++) {
+            // 逆向存入
             discrete_units.push_back(end - i);
         }
 
@@ -113,6 +115,83 @@ bool Disk::cold_allocate_Generic(int tag, int size, int obj_id, int& consecutive
     return true; 
 }
 
+bool Disk::hot_allocate(int tag, int size, int obj_id, int& consecutive, vector<int>& allocated_units) {
+    int part_id = tag_to_part[tag];
+    auto& part = Partitions[part_id];
+    if(part.free_size >= size && allocate(tag, size, obj_id, consecutive, allocated_units, part.partition_blocks)) {
+        part.free_size -= size;
+        ////assert_enough_size_size(part.partition_blocks, part.free_size, part.capacity);
+        return true;
+    }
+    // 借出去不还
+    for(int i = 1; i <= tag_to_part.size(); i ++) {
+        if(i == tag) continue;
+        int part_id = tag_to_part[i % tag_to_part.size()];
+        auto& part = Partitions[part_id];
+        if(part.is_cold == true) continue;
+        if(part.free_size >= size && allocate(tag, size, obj_id, consecutive, allocated_units, part.partition_blocks)) {
+            part.free_size -= size;
+            part.capacity -= size;
+            Partitions[tag_to_part[tag]].capacity += size;
+            ////assert_enough_size_size(part.partition_blocks, part.free_size, part.capacity);
+            return true;
+        }
+    }
+    for(int i = 1; i <= tag_to_part.size(); i ++) {
+        if(i == tag) continue;
+        int part_id = tag_to_part[i % tag_to_part.size()];
+        auto& part = Partitions[part_id];
+        if(part.is_cold == false) continue;
+        if(part.free_size >= size && allocate(tag, size, obj_id, consecutive, allocated_units, part.partition_blocks)) {
+            part.free_size -= size;
+            part.capacity -= size;
+            Partitions[tag_to_part[tag]].capacity += size;
+            ////assert_enough_size_size(part.partition_blocks, part.free_size, part.capacity);
+            return true;
+        }
+    }
+    assert(0);
+    return true;
+}
+
+bool Disk::cold_allocate(int tag, int size, int obj_id, int& consecutive, vector<int>& allocated_units) {
+    int part_id = tag_to_part[tag];
+    auto& part = Partitions[part_id];
+    if(part.free_size >= size && cold_allocate_Generic(tag, size, obj_id, consecutive, allocated_units, part.partition_blocks)) {
+        part.free_size -= size;
+        ////assert_enough_size_size(part.partition_blocks, part.free_size, part.capacity);
+        return true;
+    }
+    // 借出去不还
+    for(int i = 1; i <= tag_to_part.size(); i ++) {
+        if(i == tag) continue;
+        int part_id = tag_to_part[i % tag_to_part.size()];
+        auto& part = Partitions[part_id];
+        if(part.is_cold == false) continue;
+        if(part.free_size >= size && cold_allocate_Generic(tag, size, obj_id, consecutive, allocated_units, part.partition_blocks)) {
+            part.free_size -= size;
+            part.capacity -= size;
+            Partitions[tag_to_part[tag]].capacity += size;
+            //assert_enough_size_size(part.partition_blocks, part.free_size, part.capacity);
+            return true;
+        }
+    }
+    for(int i = 1; i <= tag_to_part.size(); i ++) {
+        if(i == tag) continue;
+        int part_id = tag_to_part[i % tag_to_part.size()];
+        auto& part = Partitions[part_id];
+        if(part.is_cold == true) continue;
+        if(part.free_size >= size && cold_allocate_Generic(tag, size, obj_id, consecutive, allocated_units, part.partition_blocks)) {
+            part.free_size -= size;
+            part.capacity -= size;
+            Partitions[tag_to_part[tag]].capacity += size;
+            //assert_enough_size_size(part.partition_blocks, part.free_size, part.capacity);
+            return true;
+        }
+    }
+    assert(0);
+    return false;
+}
 
 bool Disk::allocate(int tag, int size, int obj_id, int& consecutive, vector<int>& allocated_units, list<Block>& blocks) {
     // 先尝试分配连续空间
@@ -194,6 +273,16 @@ void merge_into(list<Block>& blocks, const Block& new_block) {
     }
 }
 
+void Disk::deallocate_main(unordered_map<int, set<int>>& units_id) {
+    for(auto& [tag, units_id_part] : units_id) {
+        int part_id = tag_to_part[tag];
+        auto& part = Partitions[part_id];
+        deallocate(units_id_part, part.partition_blocks);
+        part.free_size += units_id_part.size();
+        //assert_enough_size_size(part.partition_blocks, part.free_size, part.capacity);
+    }
+}
+
 void Disk::deallocate(const set<int>& deallocate_units, list<Block>& blocks) {
     if (deallocate_units.empty()) return;
 
@@ -269,7 +358,7 @@ bool Disk::move_to_read(int dest, string& actions) {
         }
         int new_steps = max_tokens - get_current_tokens();
         assert(new_steps >= 0);
-        if(new_steps > 0 && direct_steps - new_steps < 64) {
+        if(new_steps > 0 && direct_steps - new_steps - max_tokens < 64) {
             // 提前移动是有意义的
             actions.append(new_steps, 'p');
             current += new_steps;
@@ -291,31 +380,28 @@ bool Disk::smart_move(int dest, string& actions) {
     int reverse_steps = (current - dest + capacity) % capacity;
     
     // 跳跃阈值：当逆向更短或直接移动代价过高时跳跃
-    if(reverse_steps < direct_steps || direct_steps > max_tokens - 64) {
+    if(reverse_steps < direct_steps || direct_steps > 2 * max_tokens - 64 - 52 - 42) {
         if(can_perform(max_tokens)) { 
-            int Psize = Partitions.size();
-            for(int i = 1; i <= Psize; i ++) {
-                auto& part = Partitions[i % Psize];
-                // 如果热区需要读取的很多，则跳跃
-                if(on_heat_unit_num[i] >= part.capacity * 0.8) {
-                    auto& blocks = part.partition_blocks;
-                    for(const auto& block : blocks) {
-                        if(block.end - block.start + 1 > 5) {
-                            actions = "j " + std::to_string(block.start);
-                            save_status(block.start, MOVE, max_tokens);
-                            return true;
-                        }
+            // 如果分区需要读取的很多，则跳跃
+            int current_part_id = (current - 1) / (capacity / part_num) + 1;
+            if(part_req_unit_size[current_part_id] <= capacity / part_num * 0.5 && current_time > 9000) {
+                 // 动态选择最优跳跃目标
+                int best_part = -1;
+                double max_score = -1;
+                for (int pid = 1; pid <= part_num; ++pid) {
+                    double score = get_partition_score(pid);
+                    if (score > max_score && part_req_unit_size[pid] >= capacity / part_num * 0.6) {
+                        max_score = score;
+                        best_part = pid;
                     }
-                    int pos = blocks.front().start;
-                    actions = "j " + std::to_string(pos);
-                    save_status(pos, MOVE, max_tokens);
-                    return true;
                 }
 
-                dest = dest > capacity ? dest % capacity : dest;
-                actions = "j " + std::to_string(dest);
-                save_status(dest, MOVE, max_tokens);
-                return true;
+                if (best_part != -1) {
+                    int target = Partitions[best_part].partition_blocks.front().start;
+                    actions = "j " + std::to_string(target);
+                    save_status(target, MOVE, max_tokens);
+                    return true;
+                }
             }
         }
     }
@@ -404,11 +490,13 @@ void Disk::schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>
         obj_info[obj_id].emplace_back(obj_block_id);
         targets_set.erase(unit_id);
         int part_id = units[unit_id].part_id;
+        part_req_unit_size[part_id] --;
         on_heat_unit_num[part_id] --;
     }
     for(int unit_id : pass_away_units) {
         targets_set.erase(unit_id);
         int part_id = units[unit_id].part_id;
+        part_req_unit_size[part_id] --;
         on_heat_unit_num[part_id] --;
     }
     
