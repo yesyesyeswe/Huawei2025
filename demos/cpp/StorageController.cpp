@@ -92,9 +92,9 @@ void StorageController::process_write(int stage, StorageObject& obj) {
         int consecutive = 0;
         vector<int> units;
         bool success;
-        if(tag_manager.isHotReadTags(stage, tag))
+        if(tag_manager.isHotReadTags(stage, tag) || (tag_manager.isColdReadTags(stage, tag) && size >= 4))
             success = disks[d].hot_allocate(size, obj_id, consecutive, units);
-        else if(tag_manager.isColdReadTags(stage, tag)) 
+        else if((tag_manager.isColdReadTags(stage, tag) && size <= 2) || tag_manager.isHotDeleteTags(stage, tag))
             success = disks[d].cold_allocate(size, obj_id, consecutive, units);
         else 
             success = disks[d].normal_allocate(size, obj_id, consecutive, units);
@@ -182,7 +182,7 @@ void StorageController::printf_actions(const int G) {
                     std::string actions;
                     actions.reserve(G + 1);
                     disks[disk_id].current_time = current_time;
-                    disks[disk_id].schedule_moves(plan.units_to_read[disk_id], obj_info[local_t], actions);
+                    disks[disk_id].schedule_moves(plan.units_to_read[disk_id], obj_info[local_t], actions, current_time);
                     disk_actions[disk_id].data = actions;
                     plan.disk_head_pos[disk_id] = disks[disk_id].get_head();
                 } else {

@@ -46,26 +46,26 @@ list<Block> Disk::borrow_from_normal_zone(int need) {
 }
 
 void Disk::release_to_normal_zone(int release_size) {
-    // 优先释放热区末尾的连续空间
-    auto it = hot_zone_blocks.rbegin();
+    // 优先释放热区前面的空间
+    auto it = hot_zone_blocks.begin();
     list<Block> release_blocks;
-    while (release_size > 0 && it != hot_zone_blocks.rend()) {
+    while (release_size > 0 && it != hot_zone_blocks.end()) {
         int block_size = it->end - it->start + 1;
         
         if (block_size <= release_size) {
             // 整块释放
-            release_blocks.emplace_front(*it);
+            release_blocks.emplace_back(*it);
             update_is_hot_unit(it->start, it->end, false);
             //assert_not_used(it->start, it->end);
             release_size -= block_size;
-            it = decltype(it)(hot_zone_blocks.erase(std::next(it).base()));
+            it = hot_zone_blocks.erase(it);
         } else {
             // 切割块
-            int new_start = it->end - release_size + 1;
-            update_is_hot_unit(new_start, it->end, false);
+            int new_start = it->start + release_size;
+            update_is_hot_unit(it->start, new_start - 1, false);
             //assert_not_used(new_start, it->end);
-            release_blocks.emplace_front(new_start, it->end);
-            it->end = new_start - 1;
+            release_blocks.emplace_back(it->start, new_start - 1);
+            it->start = new_start;
             release_size = 0;
             break;
         }
@@ -125,10 +125,18 @@ void Disk::adjust_hot_zone(int new_hot_demand) {
 
         // 可以释放到普通区的空间
         if (can_release > 0) {
-            release_to_normal_zone(can_release);
+            // 先释放已使用空间
+            int used_released = min(can_release, (int)hot_used_units.size());
+            for(int i = 0; i < used_released; i ++) {
+                is_hot_unit[hot_used_units[i]] = false;
+            }
+            hot_used_units.erase(hot_used_units.begin(), hot_used_units.begin() + used_released);
+
+            int true_release = can_release - used_released;
+            release_to_normal_zone(true_release);
             hot_capacity -= can_release; // 缩小热区容量
-            hot_free_size -= can_release;
-            free_size += can_release;
+            hot_free_size -= true_release;
+            free_size += true_release;
         }
     }
     
@@ -176,6 +184,8 @@ void Disk::set_obj_to_unit(int size, int obj_id, vector<int>& allocated_units) {
         units[allocated_units[i]].object_id = obj_id;
         units[allocated_units[i]].object_block = i + 1;
         units[allocated_units[i]].is_used = true;
+        int k = (allocated_units[i] - 1) / (capacity / part_num);
+        part_req_unit_size[k + 1] ++;
         if(is_hot_unit[allocated_units[i]]) hot_req_unit_size ++;
     }
 }
@@ -402,7 +412,7 @@ bool Disk::move_to_read(int dest, string& actions) {
         }
         int new_steps = max_tokens - get_current_tokens();
         assert(new_steps >= 0);
-        if(new_steps > 0 && direct_steps - new_steps < 64) {
+        if(new_steps > 0 && direct_steps - new_steps - max_tokens < 64) {
             // 提前移动是有意义的
             actions.append(new_steps, 'p');
             current += new_steps;
@@ -424,27 +434,55 @@ bool Disk::smart_move(int dest, string& actions) {
     int reverse_steps = (current - dest + capacity) % capacity;
     
     // 跳跃阈值：当逆向更短或直接移动代价过高时跳跃
-    if(reverse_steps < direct_steps || direct_steps > max_tokens - 64) {
+    if(reverse_steps < direct_steps || direct_steps > 2 * max_tokens - 64 - 52 - 42) {
         if(can_perform(max_tokens)) { 
-            // 如果热区需要读取的很多，则跳跃
-            if(hot_req_unit_size >= hot_capacity * 0.8) {
-                for(const auto& block : hot_zone_blocks) {
-                    if(block.end - block.start + 1 > 5) {
-                        actions = "j " + std::to_string(block.start);
-                        save_status(block.start, MOVE, max_tokens);
-                        return true;
+            // 如果分区需要读取的很多，则跳跃
+            int current_part_id = (current - 1) / (capacity / part_num) + 1;
+            if(part_req_unit_size[current_part_id] <= capacity / part_num * 0.5 && current_time > 9000) {
+                 // 动态选择最优跳跃目标
+                int best_part = -1;
+                double max_score = -1;
+                for (int pid = 1; pid <= part_num; ++pid) {
+                    double score = get_partition_score(pid);
+                    if (score > max_score && part_req_unit_size[pid] >= capacity / part_num * 0.6) {
+                        max_score = score;
+                        best_part = pid;
                     }
                 }
-                int pos = hot_zone_blocks.front().start;
-                actions = "j " + std::to_string(pos);
-                save_status(pos, MOVE, max_tokens);
-                return true;
-            }
 
-            dest = dest > capacity ? dest % capacity : dest;
-            actions = "j " + std::to_string(dest);
-            save_status(dest, MOVE, max_tokens);
-            return true;
+                if (best_part != -1) {
+                    int target = (best_part - 1) * (capacity / part_num) + 1;
+                    actions = "j " + std::to_string(target);
+                    save_status(target, MOVE, max_tokens);
+                    return true;
+                }
+            //     // 先往后
+            //     int next_part_id;
+            //     if(current_part_id == part_num) next_part_id = 1;
+            //     else  next_part_id = current_part_id + 1 ;
+            //     if(part_req_unit_size[next_part_id] <= capacity / part_num * 0.5) {
+            //         for(int i = current_part_id + 2; i <= part_num ; i ++) {
+            //             if(part_req_unit_size[i] >= capacity / part_num * 0.8) {
+            //                 int new_pos = capacity / part_num * (i - 1) + 1;
+            //                 actions = "j " + std::to_string(new_pos);
+            //                 save_status(new_pos, MOVE, max_tokens);
+            //                 return true;
+            //             }
+            //         }
+            //     }
+                
+            //     // 再往前
+            //     int begin_id = 1;
+            //     if(next_part_id == 1) begin_id = 2;
+            //     for(int i = begin_id; i <= current_part_id - 2 ; i ++) {
+            //         if(part_req_unit_size[i] >= capacity / part_num * 0.8) {
+            //             int new_pos = capacity / part_num * (i - 1) + 1;
+            //             actions = "j " + std::to_string(new_pos);
+            //             save_status(new_pos, MOVE, max_tokens);
+            //             return true;
+            //         }
+            //     }
+            }
         }
     }
     // 否则继续使用p移动
@@ -510,7 +548,7 @@ void Disk::loop_requests(const set<int>& targets_set, vector<int>& result) {
 }
 
 // 磁头移动调度
-void Disk::schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions) {
+void Disk::schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions, int time) {
     if (targets_set.empty()) {
         actions += '#';
         return;
@@ -551,11 +589,15 @@ void Disk::schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>
         int obj_id = units[unit_id].object_id;
         int obj_block_id = units[unit_id].object_block;
         obj_info[obj_id].emplace_back(obj_block_id);
-        if(!is_hot_unit[unit_id]) targets_set.erase(unit_id);
+        if((time >= 32000 && time <= 38000)) targets_set.erase(unit_id);
+        int k = (unit_id - 1) / (capacity / part_num);
+        part_req_unit_size[k + 1] --;
         if(is_hot_unit[unit_id]) hot_req_unit_size --;
     }
     for(int unit_id : pass_away_units) {
         targets_set.erase(unit_id);
+        int k = (unit_id - 1) / (capacity / part_num);
+        part_req_unit_size[k + 1] --;
         if(is_hot_unit[unit_id]) hot_req_unit_size --;
     }
     

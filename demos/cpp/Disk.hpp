@@ -75,9 +75,12 @@ public:
     const int max_hot_capacity;
     list<Block> free_blocks;        // 空闲磁盘块
     list<Block> hot_zone_blocks;    // 热门读取区
+    vector<int> hot_used_units;        // 热门使用区
     vector<DiskUnit> units;         // 磁盘单元
     vector<int> pass_away_units;    // 过时单元
     int current_time;               // 当前时间
+    vector<int> part_req_unit_size;  // 每个 part 的 req 请求数量
+    const int part_num = 8;         // 分为 14 个 part
     
     Disk(int id, int G, int V) : 
         disk_id(id), 
@@ -89,13 +92,13 @@ public:
         prev_consum(-1), 
         free_size(V), 
         hot_req_unit_size(0),
-        min_hot_capacity(static_cast<int>(V * 0.1)), 
-        max_hot_capacity(static_cast<int>(V * 0.3))  
+        min_hot_capacity(static_cast<int>(V * 0.01)), 
+        max_hot_capacity(static_cast<int>(V * 0.8))  
         {
             is_hot_unit.resize(V + 1);
             fill(is_hot_unit.begin(), is_hot_unit.end(), false);
-            int hot_start = static_cast<int>(V * 0.43);
-            int hot_end = static_cast<int>(V * 0.57);
+            int hot_start = static_cast<int>(V * 0.05);
+            int hot_end = static_cast<int>(V * 0.15);
             fill(is_hot_unit.begin() + hot_start, is_hot_unit.begin() + hot_end + 1, true);
             hot_capacity = hot_end - hot_start + 1;
             hot_free_size = hot_capacity;
@@ -105,6 +108,10 @@ public:
             free_blocks.emplace_back(1, hot_start - 1);
             free_blocks.emplace_back(hot_end + 1, V);
             pass_away_units.reserve(100);
+
+            // 每一个 part 大小为 capacity / part_num
+            part_req_unit_size.resize(part_num + 1);
+            std::fill(part_req_unit_size.begin(), part_req_unit_size.end(), 0);
 
             for(int i = 0; i <= V; i ++) {
                 units.emplace_back(i);
@@ -139,6 +146,7 @@ public:
     bool hot_allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units) {
         if(hot_free_size >= size && allocate(size, obj_id, consecutive, allocated_units, hot_zone_blocks)) {
             hot_free_size -= size;
+            hot_used_units.insert(hot_used_units.end(), allocated_units.begin(), allocated_units.end());            
             //assert_enough_size();
             return true;
         }
@@ -158,6 +166,7 @@ public:
             return true;
         }
         if(hot_free_size >= size && cold_allocate_Generic(size, obj_id, consecutive, allocated_units, hot_zone_blocks)) {
+            hot_used_units.insert(hot_used_units.end(), allocated_units.begin(), allocated_units.end()); 
             hot_free_size -= size;
             return true;
         }
@@ -226,7 +235,7 @@ public:
     void loop_requests(const set<int>& targets_set, vector<int>& targets);
 
     // 磁头移动调度
-    void schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions);
+    void schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions, int time);
     bool move_to_read(int dest, string& actions); 
     bool get_actions(vector<int>& obj_index, string& actions);
     bool smart_move(int dest, string& actions);
@@ -268,6 +277,41 @@ private:
     // 分配指定大小的存储空间（优先连续）
     bool allocate(int size, int obj_id, int& consecutive, vector<int>& allocated_units, list<Block>& blocks);
     void deallocate(const set<int>& units, list<Block>& blocks);
+
+private:
+    // 新增：热度评分参数
+    const double SPATIAL_BONUS = 0.3;      // 连续区块奖励系数
+
+    // 计算单个单元的热度得分
+    double calculate_unit_score(int unit_id) const {
+        const DiskUnit& unit = units[unit_id];
+        // 时间衰减：最近访问时间越近得分越高
+        int time_gap = current_time - unit.newest_time;
+        double time_decay;
+        if(time_gap <= 10) time_decay = 1 - 0.005 * time_gap;
+        else if(time_gap < 105) time_decay = 1.05 - 0.01 * time_gap;
+        else time_decay = 0;
+        // 空间奖励：连续区块加分
+        int block_size = 1; // 默认单块
+        int obj_id = unit.object_id;
+        while(units[unit_id + block_size].object_id == obj_id) {
+            block_size ++;
+        }
+        double spatial_bonus = 1.0 + SPATIAL_BONUS * log(block_size + 1);
+        return time_decay * spatial_bonus;
+    }
+
+    // 计算分区的综合热度
+    double get_partition_score(int part_id) const {
+        int start = (part_id - 1) * (capacity / part_num) + 1;
+        int end = part_id * (capacity / part_num);
+        double score = 0.0;
+        for (int unit = start; unit <= end; ++unit) {
+            score += calculate_unit_score(unit);
+        }
+        return score / (end - start + 1); // 平均得分
+    }
+
 
 };
 #endif
