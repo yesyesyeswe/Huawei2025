@@ -13,4 +13,7 @@ output.txt
 analysis.txt
 gmon.out
 sample_test.in
-sample_test_2.in
+sample_test_2.inreplay/
+data/
+code_craft_2025/
+
