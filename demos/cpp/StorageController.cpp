@@ -6,7 +6,7 @@ void StorageController::set_partition() {
     const auto& tag_units_need = tag_manager.tag_units_need;
     int total_units_need = std::accumulate(tag_units_need.begin(), tag_units_need.end(), 0);
     int tag_half_num = hot.size();
-    int spare_units = static_cast<int>(0.9 * capacity) - 1;
+    int spare_units = static_cast<int>(0.95 * capacity) - 1;
 
     int disk_num = disks.size();
     for(int i = 1; i < disk_num; i ++) {
@@ -14,15 +14,26 @@ void StorageController::set_partition() {
         std::random_shuffle(cold.begin(), cold.end());
         int begin = 1;
         auto& disk = disks[i];
+        int tag_half_half_num = tag_half_num / 2;
+        // j = 1 2 3 4 冷
+        for(int j = 0; j < tag_half_half_num; j ++) {
+            int cold_tag_id = cold[j];
+            int cold_need = static_cast<int>(tag_units_need[cold_tag_id] * 1.0 / total_units_need * spare_units);
+            disk.add_partition(cold_tag_id, j + 1, begin, cold_need, true);
+            begin += cold_need;
+        }
+        // j = 5 6 7 8 9 10 11 12 热
         for(int j = 0; j < tag_half_num; j ++) {
             int hot_tag_id = hot[j];
             int hot_need = static_cast<int>(tag_units_need[hot_tag_id] * 1.0 / total_units_need * spare_units);
-            disk.add_partition(hot_tag_id, 2 * j + 1, begin, hot_need, false);
+            disk.add_partition(hot_tag_id, j + 5, begin, hot_need, false);
             begin += hot_need;
-
-            int cold_tag_id = cold[j];
+        }
+        // j = 13 14 15 16 冷
+        for(int j = 0; j < tag_half_half_num; j ++) {
+            int cold_tag_id = cold[j + 4];
             int cold_need = static_cast<int>(tag_units_need[cold_tag_id] * 1.0 / total_units_need * spare_units);
-            disk.add_partition(cold_tag_id, 2 * j + 2, begin, cold_need, true);
+            disk.add_partition(cold_tag_id, j + 13, begin, cold_need, true);
             begin += cold_need;
         }
         if(begin <= spare_units) {

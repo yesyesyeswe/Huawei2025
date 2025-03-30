@@ -16,6 +16,7 @@
 #include <numeric>
 #include <list>
 #include <thread>
+#include <tuple>
 using std::vector;
 using std::queue;
 using std::deque;
@@ -26,6 +27,8 @@ using std::unordered_map;
 using std::unordered_set;
 using std::ceil;
 using std::list;
+using std::tuple;
+using std::max;
 using std::min;
 
 #define READ 999
@@ -88,9 +91,11 @@ public:
         int capacity;                  // 分区容量
         int free_size;                 // 分区空闲空间
         bool is_cold;                  // 冷分区标记
+        int part_begin = 0;
+        int part_end = 0;
         
         Partition(int _part_id, int begin, int end) 
-            : part_id(_part_id), capacity(end - begin + 1), free_size(end - begin + 1) {
+            : part_id(_part_id), capacity(end - begin + 1), free_size(end - begin + 1), part_begin(begin), part_end(end) {
                 partition_blocks.emplace_back(begin, end);
             }
 
@@ -101,6 +106,10 @@ public:
     vector<int> on_heat_unit_num;     // 每个分区带读取单元
     vector<int> part_req_unit_size;  // 每个 part 的 req 请求数量
     const int part_num = 16;         // 分为 16 个 tag, 17 part    
+    double last_hit_rate = 0.0;     // 上一次命中率
+
+    deque<int> recent_requests;      // 最近请求记录
+    int PREDICT_WINDOW = 64;    // 可调整的预测窗口
     
     Disk(int id, int G, int V, int tag_num) : 
         disk_id(id), capacity(V), 
@@ -112,7 +121,7 @@ public:
             units.emplace_back(i);
         }
 
-        int begin = static_cast<int>(0.9 * V);
+        int begin = static_cast<int>(0.95 * V);
         reserve_free_size = V - begin + 1;
         reserve_blocks.emplace_back(begin, V);
 
@@ -175,7 +184,7 @@ public:
     void schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>& obj_info, string& actions);
     bool move_to_read(int dest, string& actions); 
     bool get_actions(vector<int>& obj_index, string& actions);
-    bool smart_move(int dest, string& actions);
+    bool smart_move(int dest, string& actions, int part_id);
     bool perform_read(int dest, string& actions, int read_consume);
 
     // Setter 方法
@@ -225,32 +234,105 @@ private:
 
     // 计算单个单元的热度得分
     double calculate_unit_score(int unit_id) const {
+        double TIME_CRITICAL_FACTOR = 0.1; // 时间敏感系数
+        double FREQUENCY_WEIGHT = 1.2;      // 访问频率权重
         const DiskUnit& unit = units[unit_id];
-        // 时间衰减：最近访问时间越近得分越高
-        int time_gap = current_time - unit.newest_time;
-        double time_decay;
-        if(time_gap <= 10) time_decay = 1 - 0.005 * time_gap;
-        else if(time_gap < 105) time_decay = 1.05 - 0.01 * time_gap;
-        else time_decay = 0;
-        // 空间奖励：连续区块加分
-        int block_size = 1; // 默认单块
-        int obj_id = unit.object_id;
-        while(units[unit_id + block_size].object_id == obj_id) {
-            block_size ++;
+        
+        // 时间敏感度：剩余生存时间倒计时
+        int ttl = 105 - (current_time - unit.newest_time);
+        double time_score = 1.0 / (1.0 + exp(-TIME_CRITICAL_FACTOR * ttl));
+        
+        // 空间连续性奖励
+        int block_size = 1;
+        for (int i = unit_id + 1; i <= capacity; ++i) {
+            if (units[i].object_id == unit.object_id) block_size++;
+            else break;
         }
-        double spatial_bonus = 1.0 + SPATIAL_BONUS * log(block_size + 1);
-        return time_decay * spatial_bonus;
+        double spatial_score = 1.0 + SPATIAL_BONUS * log1p(block_size);
+        
+        // 访问频率加权
+        double freq_score = part_req_unit_size[units[unit_id].part_id] * FREQUENCY_WEIGHT;
+        
+        return time_score * spatial_score * freq_score;
     }
 
     // 计算分区的综合热度
     double get_partition_score(int part_id) const {
-        int start = (part_id - 1) * (capacity / part_num) + 1;
-        int end = part_id * (capacity / part_num);
+        int start = Partitions[part_id].part_begin;
+        int end = Partitions[part_id].part_end;
         double score = 0.0;
         for (int unit = start; unit <= end; ++unit) {
+            if(units[unit].is_used)
             score += calculate_unit_score(unit);
         }
-        return score / (end - start + 1); // 平均得分
+        return score; // 平均得分
+    }
+
+public:
+    vector<int> predict_hotspots(const deque<int>& history) const {
+        // 统计频率
+        unordered_map<int, int> freq_map;
+        for (int unit : history) {
+            freq_map[unit]++;
+        }
+
+        // 转换为可排序的vector
+        vector<pair<int, int>> freq_vec(freq_map.begin(), freq_map.end());
+        
+        // 按频率降序排序
+        sort(freq_vec.begin(), freq_vec.end(), 
+            [](auto& a, auto& b) { return a.second > b.second; });
+
+        // 提取Top3热点
+        vector<int> hotspots;
+        for (int i = 0; i < 3 && i < freq_vec.size(); ++i) {
+            hotspots.push_back(freq_vec[i].first);
+        }
+        
+        return hotspots;
+    }
+
+    void process_request(int unit) {
+        // 更新请求历史
+        recent_requests.push_back(unit);
+        if (recent_requests.size() > PREDICT_WINDOW) {
+            recent_requests.pop_front();
+        }
+        
+        // 每100个时间单位调整窗口
+        if (current_time % 100 == 0) {
+            adjust_predict_window();
+        }
+    }
+
+    void adjust_predict_window() {
+        double current_hit_rate = calculate_hit_rate();
+        
+        // 动态调整逻辑
+        if (current_hit_rate > last_hit_rate + 0.1) {
+            PREDICT_WINDOW = std::min(128, PREDICT_WINDOW + 8);
+        } else if (current_hit_rate < last_hit_rate - 0.1) {
+            PREDICT_WINDOW = std::max(32, PREDICT_WINDOW - 8);
+        }
+        
+        last_hit_rate = current_hit_rate;
+    }
+
+    double calculate_hit_rate() const {
+        if (recent_requests.empty()) return 0.0;
+        
+        // 获取预测热点
+        auto hotspots = predict_hotspots(recent_requests);
+        
+        // 计算实际命中数
+        int hit_count = 0;
+        for (int unit : recent_requests) {
+            if (find(hotspots.begin(), hotspots.end(), unit) != hotspots.end()) {
+                hit_count++;
+            }
+        }
+        
+        return hit_count * 1.0 / recent_requests.size();
     }
 
 };

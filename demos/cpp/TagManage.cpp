@@ -39,15 +39,17 @@ vector<int> TagManager::select_disk(int tag, int obj_id, const vector<Disk>& dis
 
 void TagManager::process_flequency_info() {
     vector<int> tag_read_times(tag_num + 1, 0);
+    double tag_average_size[17] = {0, 1.54, 2.06, 2.10, 1.41, 2.12, 1.54, 1.42, 3.37, 2.71, 2.69, 1.37, 3.39, 1.47, 1.55, 2.72};
 
     // --- 计算每一个 tag 所需最大存储空间 ---
     for (int i = 1; i <= tag_num; i ++) {
         tag_units_need[i] = std::accumulate(fre_write[i].begin() + 1, fre_write[i].end(), 0);
         tag_units_need[i] -= std::accumulate(fre_del[i].begin() + 1, fre_del[i].end(), 0);
         tag_read_times[i] = std::accumulate(fre_read[i].begin() + 1, fre_read[i].end(), 0);
-
     }   
-    
+    for(int i = 1; i < tag_num; i ++) {
+        tag_units_need[i] = static_cast<int>(tag_units_need[i] * tag_average_size[i]);
+    }
     // --- 对读取次数进行排序 ---
     vector<pair<int, int>> candidates;
     for (int i = 1; i <= tag_num; i++) {

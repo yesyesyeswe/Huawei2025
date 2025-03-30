@@ -374,30 +374,70 @@ bool Disk::move_to_read(int dest, string& actions) {
     return false;
 }
 
-bool Disk::smart_move(int dest, string& actions) {
+bool Disk::smart_move(int dest, string& actions, int part_id) {
     int current = get_head();
     int direct_steps = (dest - current + capacity) % capacity;
     int reverse_steps = (current - dest + capacity) % capacity;
     
+    // // 获取预测热点（使用const正确性）
+    // const auto& hot_spots = predict_hotspots(recent_requests); 
+
+    // // 动态调整跳跃阈值
+    // auto should_jump = [&](int target) -> bool {
+    //     return (abs(target - current) > 2 * max_tokens) 
+    //         || (part_req_unit_size[units[target].part_id] > Partitions[units[target].part_id].capacity * 0.6);
+    // };
+
+    // // 优先选择预测热点中的有效目标
+    // for (int spot : hot_spots) {
+    //     if (spot != current && units[spot].is_used && should_jump(spot)) {
+    //         int jump_cost = max_tokens;
+    //         if (can_perform(jump_cost)) {
+    //             actions = "j " + std::to_string(spot);
+    //             save_status(spot, MOVE, jump_cost);
+    //             return true;
+    //         }
+    //     }
+    // }
+
+
     // 跳跃阈值：当逆向更短或直接移动代价过高时跳跃
     if(reverse_steps < direct_steps || direct_steps > 2 * max_tokens - 64 - 52 - 42) {
         if(can_perform(max_tokens)) { 
-            // 如果分区需要读取的很多，则跳跃
-            int current_part_id = (current - 1) / (capacity / part_num) + 1;
-            if(part_req_unit_size[current_part_id] <= capacity / part_num * 0.5 && current_time > 9000) {
-                 // 动态选择最优跳跃目标
-                int best_part = -1;
-                double max_score = -1;
-                for (int pid = 1; pid <= part_num; ++pid) {
-                    double score = get_partition_score(pid);
-                    if (score > max_score && part_req_unit_size[pid] >= capacity / part_num * 0.6) {
-                        max_score = score;
-                        best_part = pid;
-                    }
-                }
+            auto& current_part = Partitions[part_id];
+            if(part_req_unit_size[part_id] <= current_part.capacity * 0.5 && current_time > 10800) {
+                // 成本效益分析函数
+                auto evaluate_jump = [&](int target_part) -> double {
+                    const Partition& part = Partitions[target_part];
+                    // 移动成本计算
+                    int move_cost = (part.part_begin - head_position + capacity) % capacity;
+                    move_cost = min(move_cost, capacity - move_cost);
+                    move_cost = std::max(move_cost, max_tokens);
+                    
+                    // 预期收益计算
+                    double score = get_partition_score(target_part);
+                    
+                    // 衰减系数：距离越远衰减越大
+                    double distance_decay = exp(-0.05 * move_cost);
+                    return score * distance_decay / (move_cost + 1e-5);
+                };
 
-                if (best_part != -1) {
-                    int target = Partitions[best_part].partition_blocks.front().start;
+                // 动态选择最佳分区
+                vector<pair<double, int>> candidate_parts;
+                for (int pid = 0; pid < part_num; ++pid) {
+                    if (pid == part_id) continue;
+                    double profit = evaluate_jump(pid);
+                    candidate_parts.emplace_back(profit, pid);
+                }
+                sort(candidate_parts.rbegin(), candidate_parts.rend());
+
+                // 选择前三候选进行精细评估
+                for (int i = 0; i < 3 && i < candidate_parts.size(); ++i) {
+                    int pid = candidate_parts[i].second;
+                    const Partition& part = Partitions[pid];
+                    if (part_req_unit_size[pid] < part.capacity * 0.5) continue;
+
+                    int target = part.part_begin + rand() % (part.part_end - part.part_begin);
                     actions = "j " + std::to_string(target);
                     save_status(target, MOVE, max_tokens);
                     return true;
@@ -439,7 +479,8 @@ bool Disk::get_actions(vector<int>& targets, string& actions) {
         }
         if (dest != current) {
             set_head_position(current);
-            if (smart_move(dest, actions)) 
+            int part_id = units[current].part_id;
+            if (smart_move(dest, actions, part_id)) 
                 return true; // 提前终止
             current = get_head(); // smart_move 已更新磁头位置
             assert(current == dest);
@@ -474,6 +515,11 @@ void Disk::schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>
         return;
     }
 
+    // // 处理每个请求时记录
+    // for (int unit : targets_set) {
+    //     process_request(unit); // 新增调用点
+    // }
+
     vector<int> targets;
     targets.reserve(targets_set.size());
 
@@ -488,7 +534,7 @@ void Disk::schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>
         int obj_id = units[unit_id].object_id;
         int obj_block_id = units[unit_id].object_block;
         obj_info[obj_id].emplace_back(obj_block_id);
-        targets_set.erase(unit_id);
+        //if(current_time >= 30000 && current_time <= 37000) targets_set.erase(unit_id);
         int part_id = units[unit_id].part_id;
         part_req_unit_size[part_id] --;
         on_heat_unit_num[part_id] --;
@@ -508,7 +554,9 @@ void Disk::schedule_moves(set<int>& targets_set, unordered_map<int, vector<int>>
     reset_tokens();
     units_read_id.clear();
     pass_away_units.clear();
-
+    // if (current_time % 100 == 0) {
+    //     recent_requests.clear();
+    // }
     return;
 }
 
