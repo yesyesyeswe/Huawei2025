@@ -1,3 +1,2 @@
-*.cpp linguist-language=cpp
-*.c linguist-language=cpp
-*.java linguist-language=cpp
+*.py linguist-language=java
+
