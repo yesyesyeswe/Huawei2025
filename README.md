@@ -18,15 +18,8 @@
 
    - SCAN 电梯算法，根据待读取请求集合，生成读取路径
 
-   - 动态规划算法，根据
-     $$
-     V(pos,c_{remaining},l_{prev}) = \max\begin{cases}
-     \max_{\text{target}}f(\text{target}) \\[6pt]
-     V(\text{pos}+1, c_{remaining} - 1, 0) \\[6pt]
-     s_i(t) + V(pos + 1,  c_{remaining} - token[l_{prev}], l_{prev} + 1)
-     \end{cases}
-     $$
-     选择 jump，pass 以及 read 中收益最高者，作为路径的选择。其中 $f$ 为衡量跳跃后的收益的函数，具体有几种实现：
+   - 动态规划算法，根据 $\max_{\text{target}}f(\text{target}), V(pos+1, c_{remaining} - 1, 0)$ 和 $s_i(t) + V(pos + 1,  c_{remaining} - token[l_{prev}], l_{prev} + 1)$
+     选择 jump，pass 以及 read 中收益最高者，作为决策路径。其中 $f$ 为衡量跳跃后的收益的函数，具体有几种实现：
 
      (0) 考虑未来动态规划的收益 
 
